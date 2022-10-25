@@ -5,7 +5,7 @@
 # Group A2
 # Dietrich Rordorf, Marco Lecci, Rizoanun Nasa, Sarah Castratori
 #
-# This script is used to preprocess the raw data from CSV to useable
+# This script is used to preprocess the raw data from CSV to a useable
 # state.
 #
 # =====================================================================
@@ -37,7 +37,7 @@ str(df)
 # --> "emp_length" is coded as string such as "3 years" or "< 1 year"
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
 # --> "verification_status" is coded as string but might be a binary 0/1
-# --> "issue_d" seems to indicate when the loan was issued - this variable is not future-proof and may thus be dropped
+# --> "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
 # --> "loan_status" is unstructured but includes a status that we may need to extract
 # --> "url" includes and id and may be removed as it does not seem to bear any meaning
 # --> "desc" and "title" may need some NLP treatment
