@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------
-# Assignment 1 - REGRESSION - PREDICT
-# =====================================================================
+# Assignment 1 - REGRESSION - PREDICT                    ➔ DELIVERABLE!
+# ---------------------------------------------------------------------
 #
 # Group A2
 # Dietrich Rordorf, Marco Lecci, Rizoanun Nasa, Sarah Castratori
@@ -9,7 +9,6 @@
 # handed in and that will be used by the professors to test
 # the model on real-world unseen data.
 #
-# ➔ DELIVERABLE
 # ---------------------------------------------------------------------
 #
 # Provide the professors with a separate R file where:
@@ -22,4 +21,7 @@
 #      data).
 # 4. our best trained model is loaded (functions are explained in the assignments)
 # 5. our best trained model is evaluated with the new data
-#
+# =====================================================================
+
+# allow for reproducible results
+set.seed(1)

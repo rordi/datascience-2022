@@ -2,6 +2,13 @@
 
 Data Science WS 2022 Group Work
 
+Group A2
+
+ - Dietrich Rordorf
+ - Marco Lecci
+ - Rizoanun Nasa
+ - Sarah Castratori
+
 ### Getting Started Guide
 
 1. Create a free account on [GitHub.com](https://github.com/)

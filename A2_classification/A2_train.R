@@ -1,10 +1,13 @@
 # ---------------------------------------------------------------------
 # Assignment 2 - CLASSIFICATON - TRAIN
-# =====================================================================
+# ---------------------------------------------------------------------
 #
 # Group A2
 # Dietrich Rordorf, Marco Lecci, Rizoanun Nasa, Sarah Castratori
 #
 # This script is used to train a model that we can later use
 # for prediction for the classification task.
-# ---------------------------------------------------------------------
+# =====================================================================
+
+# allow for reproducible results
+set.seed(1)
