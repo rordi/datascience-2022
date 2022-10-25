@@ -17,4 +17,4 @@ Group A2
 1. Install GitHub Desktop, see [installation instructions for Windows or MacOS](https://docs.github.com/en/desktop/installing-and-configuring-github-desktop/installing-and-authenticating-to-github-desktop/setting-up-github-desktop)
 1. Log in to GitHub Desktop using your GitHub.com account
 1. [Clone the repository to your local machine](https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/adding-and-cloning-repositories/cloning-and-forking-repositories-from-github-desktop) using GitHub Desktop
-    - the repository is private and is called: ```rordi/datascience-2022```
+    - the repository is private and is called: [```rordi/datascience-2022```](https://github.com/rordi/datascience-2022)
