@@ -25,6 +25,12 @@ unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 # load raw data from csv into data frame
 df <- read.csv("./A1_regression/LCdata.csv", sep=";")
 
+# drop id ttributes (bear no meaning)
+df = subset(df, select = -c(id, member_id))
+
+# drop attributes that are not present for new applicants in unseen data - list provided by Gwen
+df = subset(df, select = -c(collection_recovery_fee, installment, issue_d, last_credit_pull_d, last_pymnt_amnt, last_pymnt_d, loan_status, next_pymnt_d, out_prncp, out_prncp_inv, pymnt_plan, recoveries, term, total_pymnt, total_pymnt_inv, total_rec_int, total_rec_late_fee, total_rec_prncp))
+
 # print basic description of data frame
 str(df)
 
@@ -48,7 +54,31 @@ str(df)
 # 
 # scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
 # threshold is 100'000 USD we will replace all outliers >100'000 USD with 100'000 USD. Then we scale from 0-1 scale.
+#
+# data is from 2007 to 2015
 
 # check for sparsity of attributes
 percent(colMeans(is.na(df)))
 
+# missing values in:
+# annual_inc --> <0.01%
+# delinq_2yrs --> <0.01%
+# inq_last_6mths --> <0.01%
+# mths_since_last_delinq --> 51%
+# mths_since_last_record --> 84%
+# open_acc
+# pub_rec
+# revol_bal
+# revol_util
+# total_acc
+# collections_12_mths_ex_med
+# mths_since_last_major_derog
+# annual_inc_joint
+# dti_joint
+
+# a closer look at the int_rate, which is the label attribute
+structure(df$int_rate)
+hist(df$int_rate)
+summary(df$int_rate)
+
+# interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
