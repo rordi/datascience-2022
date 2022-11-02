@@ -4,3 +4,4 @@
 .RData
 .Ruserdata
 A1_regression/LCdata.csv
+A1_regression/*.csv

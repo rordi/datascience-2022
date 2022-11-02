@@ -28,9 +28,29 @@ df <- read.csv("./A1_regression/LCdata.csv", sep=";")
 # drop id attributes (bear no meaning)
 df = subset(df, select = -c(id, member_id, url))
 
-# drop attributes that are not present for new applicants in unseen data - list provided by Gwen
-# @TODO - double-check once Gwen published the final list
-df = subset(df, select = -c(collection_recovery_fee, installment, issue_d, last_credit_pull_d, last_pymnt_amnt, last_pymnt_d, loan_status, next_pymnt_d, out_prncp, out_prncp_inv, pymnt_plan, recoveries, term, total_pymnt, total_pymnt_inv, total_rec_int, total_rec_late_fee, total_rec_prncp))
+# drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
+df = subset(df, select = -c(
+  collection_recovery_fee,
+  installment,
+  issue_d,
+  last_pymnt_amnt,
+  last_pymnt_d,
+  loan_status,
+  next_pymnt_d,
+  out_prncp,
+  out_prncp_inv,
+  pymnt_plan,
+  recoveries,
+  term,
+  total_pymnt,
+  total_pymnt_inv,
+  total_rec_int,
+  total_rec_late_fee,
+  total_rec_prncp
+))
+
+# dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
+write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
 # print basic description of data frame
 str(df)
@@ -53,7 +73,7 @@ str(df)
 #  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
 #  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
 
-# --> "term" is coded as string such as " 36 months"
+# --> "term" is coded as string such as "36 months"
 # --> "emp_length" is coded as string such as "3 years" or "< 1 year"
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
 
@@ -95,6 +115,3 @@ hist(df$int_rate)
 summary(df$int_rate)
 
 # interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
-
-
-# didi change test
