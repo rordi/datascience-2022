@@ -9,6 +9,14 @@ Group A2
  - Rizoanun Nasa
  - Sarah Castratori
 
+### Assignment 1
+
+Assignment 1 is located in the folder ```A1_regression```.
+
+### Assignment 2
+
+Assignment 2 is located in the folder ```A2_classification```.
+
 ### Getting Started Guide
 
 1. Create a free account on [GitHub.com](https://github.com/)
