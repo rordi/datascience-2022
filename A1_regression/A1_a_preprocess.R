@@ -17,23 +17,27 @@ set.seed(1)
 install.packages("corrplot")
 install.packages("dplyr")
 install.packages("scales")
+install.packages("data.table")
 install.packages("skimr")
+
 
 # load packages
 library("corrplot")
 library("dplyr")
 library("scales")
+library("stringr")
+library("data.table")
+library("tidyverse")
 library("skimr")
-
 
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
-df <- read.csv("./A1_regression/LCdata.csv", sep=";")
+df <- fread("./A1_regression/LCdata.csv", sep=";")
 
 # drop id attributes (bear no meaning)
-df = subset(df, select = -c(id, member_id, url))
+df <- subset(df, select = -c(id,member_id, url))
 
 # drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
 df = subset(df, select = -c(
@@ -56,8 +60,13 @@ df = subset(df, select = -c(
   total_rec_prncp
 ))
 
+
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
+
+# To create a new dataset out of the previous one, by keeping only numeric variables
+numbers<-select_if(df, is.numeric)
+cor(numbers$int_rate,numbers)
 
 # print basic description of data frame
 dim(df)
@@ -80,9 +89,14 @@ str(df)
 #  - home_ownership: coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE or code as dummy vars
 #  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
 #  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
-#
-# --> "term" is coded as string such as "36 months"
+# --> "term" is coded as string such as " 36 months" 
+#!!!!! can we leave it out?
 # --> "emp_length" is coded as string such as "3 years" or "< 1 year"
+df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
+df$emp_length<-as.numeric(df$emp_length)
+df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
+cor(df$emp_length,df$int_rate)
+#!!!!irrelevant we can leave it out: 0.6% correlation
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
 # --> "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
 # --> "loan_status" is unstructured but includes a status that we may need to extract
