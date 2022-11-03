@@ -14,14 +14,22 @@
 set.seed(1)
 
 # install package dependencies
+install.packages("corrplot")
+install.packages("dplyr")
 install.packages("scales")
 install.packages("data.table")
+install.packages("skimr")
+
+
 # load packages
+library("corrplot")
+library("dplyr")
 library("scales")
 library("stringr")
 library("data.table")
 library("tidyverse")
-library(dplyr)
+library("skimr")
+
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
@@ -31,13 +39,37 @@ df <- fread("./A1_regression/LCdata.csv", sep=";")
 # drop id attributes (bear no meaning)
 df <- subset(df, select = -c(id,member_id, url))
 
-# drop attributes that are not present for new applicants in unseen data - list provided by Gwen
-# @TODO - double-check once Gwen published the final list
-df = subset(df, select = -c(collection_recovery_fee, installment, issue_d, last_credit_pull_d, last_pymnt_amnt, last_pymnt_d, loan_status, next_pymnt_d, out_prncp, out_prncp_inv, pymnt_plan, recoveries, term, total_pymnt, total_pymnt_inv, total_rec_int, total_rec_late_fee, total_rec_prncp))
+# drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
+df = subset(df, select = -c(
+  collection_recovery_fee,
+  installment,
+  issue_d,
+  last_pymnt_amnt,
+  last_pymnt_d,
+  loan_status,
+  next_pymnt_d,
+  out_prncp,
+  out_prncp_inv,
+  pymnt_plan,
+  recoveries,
+  term,
+  total_pymnt,
+  total_pymnt_inv,
+  total_rec_int,
+  total_rec_late_fee,
+  total_rec_prncp
+))
+
+
+# dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
+write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
+
 # To create a new dataset out of the previous one, by keeping only numeric variables
 numbers<-select_if(df, is.numeric)
 cor(numbers$int_rate,numbers)
+
 # print basic description of data frame
+dim(df)
 str(df)
 
 # Initial observations:
@@ -66,14 +98,13 @@ df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
 cor(df$emp_length,df$int_rate)
 #!!!!irrelevant we can leave it out: 0.6% correlation
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
-
 # --> "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
 # --> "loan_status" is unstructured but includes a status that we may need to extract
 # --> "url" includes and id and may be removed as it does not seem to bear any meaning
 # --> "desc" and "title" may need some NLP treatment
 # --> "zip_code" may need to be translated into latitude / longitude to be used as more appropriate geographical indicator
 # --> "last_pymnt_d" and "next_pymnt_d" are coded as dates, we may need to compute the delta in months instead
-
+#
 # 
 # scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
 # threshold is 100'000 USD we will replace all outliers >100'000 USD with 100'000 USD. Then we scale from 0-1 scale.
@@ -100,11 +131,22 @@ percent(colMeans(is.na(df)))
 # dti_joint
 
 # a closer look at the int_rate, which is the label attribute
-structure(df$int_rate)
-hist(df$int_rate)
-summary(df$int_rate)
-
 # interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
+summary(df$int_rate)
+hist(df$int_rate, main="Interest Rates")
+boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
 
+# a closer look at the annual income
+# range 0 - 9.5 mio., i.e. some one-sided huge outliers --> apply some threshold then scale
+# 4 NAs --> apply some strategy to fill (mean / median / closest neighbour)
+summary(df$annual_inc)
+hist(df$annual_inc, main="Annual Income")
+boxplot(df$annual_inc, main="Annual Income")
 
-# didi change test
+# we need to filter for numeric attrs to use corrplot
+# corrplot(df)
+
+glimpse(df)
+summary(df)
+skim(df)
+
