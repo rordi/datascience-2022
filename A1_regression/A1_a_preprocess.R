@@ -14,10 +14,17 @@
 set.seed(1)
 
 # install package dependencies
+install.packages("corrplot")
+install.packages("dplyr")
 install.packages("scales")
+install.packages("skimr")
 
 # load packages
+library("corrplot")
+library("dplyr")
 library("scales")
+library("skimr")
+
 
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
@@ -53,6 +60,7 @@ df = subset(df, select = -c(
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
 # print basic description of data frame
+dim(df)
 str(df)
 
 # Initial observations:
@@ -72,18 +80,17 @@ str(df)
 #  - home_ownership: coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE or code as dummy vars
 #  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
 #  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
-
+#
 # --> "term" is coded as string such as "36 months"
 # --> "emp_length" is coded as string such as "3 years" or "< 1 year"
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
-
 # --> "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
 # --> "loan_status" is unstructured but includes a status that we may need to extract
 # --> "url" includes and id and may be removed as it does not seem to bear any meaning
 # --> "desc" and "title" may need some NLP treatment
 # --> "zip_code" may need to be translated into latitude / longitude to be used as more appropriate geographical indicator
 # --> "last_pymnt_d" and "next_pymnt_d" are coded as dates, we may need to compute the delta in months instead
-
+#
 # 
 # scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
 # threshold is 100'000 USD we will replace all outliers >100'000 USD with 100'000 USD. Then we scale from 0-1 scale.
@@ -110,8 +117,22 @@ percent(colMeans(is.na(df)))
 # dti_joint
 
 # a closer look at the int_rate, which is the label attribute
-structure(df$int_rate)
-hist(df$int_rate)
-summary(df$int_rate)
-
 # interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
+summary(df$int_rate)
+hist(df$int_rate, main="Interest Rates")
+boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
+
+# a closer look at the annual income
+# range 0 - 9.5 mio., i.e. some one-sided huge outliers --> apply some threshold then scale
+# 4 NAs --> apply some strategy to fill (mean / median / closest neighbour)
+summary(df$annual_inc)
+hist(df$annual_inc, main="Annual Income")
+boxplot(df$annual_inc, main="Annual Income")
+
+# we need to filter for numeric attrs to use corrplot
+# corrplot(df)
+
+glimpse(df)
+summary(df)
+skim(df)
+
