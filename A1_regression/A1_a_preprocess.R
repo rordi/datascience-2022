@@ -32,14 +32,12 @@ library("tidyverse")
 library("skimr")
 library("fastDummies")
 library("car")
+
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
 df <- fread("./A1_regression/LCdata.csv", sep=";")
-
-# drop id attributes (bear no meaning)
-df <- subset(df, select = -c(id,member_id, url))
 
 # drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
 df = subset(df, select = -c(
@@ -62,16 +60,38 @@ df = subset(df, select = -c(
   total_rec_prncp
 ))
 
+# dump more attributes that we identified as irrelevant
+df = subset(df, select = -c(
+  id,             # only providing an order in which the applications were saved into the database otherwise meaningless
+  member_id,      # too many unique values to be reasonably used
+  url             # the url contains the id, only providing an order in which the applications were saved into the database otherwise meaningless
+))
 
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
+# @TODO -- in a first step we drop some text-based content to simplify the model - we may later run experiments with NLP
+df = subset(df, select = -c(
+  title,         # the title of the loan application -- @TODO -- code as dummy variables / NLP? (ca. 56K unique values)
+  emp_title,     # the job title of the loan applicant -- @TODO -- code as dummy variables / NLP? (ca. 265K unique values)
+  desc           # some free text provided by loan applicant on why the want / need to borrow -- @TODO -- use NLP? (86% null, ca. 112K unique values)
+))
+
 # print basic description of data frame
-dim(df)
+dim(df)    # we have 49 variables left and ~798K observations
 str(df)
 
+# loan amount is the amount requested by the borrowers, while funded amounts are what investors commited and what was finally borrowed
+# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount.
+cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714
+cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339
+df = subset(df, select = -c(
+  funded_amnt,      # likely only available after interest rate was computed and published, highliy correlated with loan_amt
+  funded_amnt_inv   # likely only available after interest rate was computed and published, highliy correlated with loan_amt
+))
+
 # Initial observations:
-# --> after inital drop of variables, we have 52 variables left and ~798K observations
+# --> after inital drop of variables, we have 49 variables left and ~798K observations
 # --> existing versus new applicants: new applicants have many data attributes missing (0 or NA) --> we may drop some of these attributes
 # --> some variables have many missing values (NA) or many 0 values (sparse variables) --> some customers are existing customers of LC versus new customers that may not have many of these attributes
 # --> numeric variables have several orders of magnitude difference (we need scale numeric features)
@@ -79,14 +99,10 @@ str(df)
 # --> int_rate is outr label variable (the one to predict)
 # Possible preprocessing operations:
 #  - loan_amount: convert to num and scale / normalize
-#(!)loan amount is the amount requested by the borrowers, I think we can leave it out, since it is redundant and the funded amnt it is really the variable that matter for the interest rate (I guess).
-cor(numbers$loan_amnt, numbers$funded_amnt)
-#  - funded_amnt: convert to num and scale / normalize
-#  - funded_amnt_inv: look-up the meaning in terminology
-# I don't really get this variable I thought it was the total amount invested in the project not considering the loan but data doesn't makes sense. Can someone explain it?
 #  - emp_title: code as dummy variables (check first the amount of values)
 #  - emp_length: convert to months (numeric) and scale / normalize
 #  - home_ownership: coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE or code as dummy vars
+
 # verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
 df<-dummy_cols(df, select_columns = c("verification_status", "purpose","home_ownership","addr_state"),
            remove_first_dummy = FALSE)
