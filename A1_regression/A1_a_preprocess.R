@@ -12,6 +12,7 @@
 
 # allow for reproducible results
 set.seed(1)
+rm(list=ls())
 
 # install package dependencies
 install.packages("corrplot")
@@ -21,7 +22,8 @@ install.packages("data.table")
 install.packages("skimr")
 install.packages("fastDummies")
 install.packages("car")
-
+install.packages("tm")
+install.packages("SnowballC")
 # load packages
 library("corrplot")
 library("dplyr")
@@ -32,7 +34,8 @@ library("tidyverse")
 library("skimr")
 library("fastDummies")
 library("car")
-
+library("tm")
+library(SnowballC)
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
@@ -70,6 +73,10 @@ df = subset(df, select = -c(
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
+#NLP_frame
+
+NLP_df<-df[,c("title","emp_title","desc")]
+
 # @TODO -- in a first step we drop some text-based content to simplify the model - we may later run experiments with NLP
 df = subset(df, select = -c(
   title,         # the title of the loan application -- @TODO -- code as dummy variables / NLP? (ca. 56K unique values)
@@ -96,7 +103,7 @@ df = subset(df, select = -c(
 # --> some variables have many missing values (NA) or many 0 values (sparse variables) --> some customers are existing customers of LC versus new customers that may not have many of these attributes
 # --> numeric variables have several orders of magnitude difference (we need scale numeric features)
 # --> some applications are "joint" applications (co-borrowers, see field "verified_status_joint"), can be interpreted in order "not verified" < "income source verified" < "verified by LC"
-# --> int_rate is outr label variable (the one to predict)
+# --> int_rate is our label variable (the one to predict)
 # Possible preprocessing operations:
 #  - loan_amount: convert to num and scale / normalize
 #  - emp_title: code as dummy variables (check first the amount of values)
@@ -151,13 +158,12 @@ cor(df$int_rate,df$annual_inc)
 df$dti_joint<-replace_na(df$dti_joint,0)
 cor(df$int_rate,df$dti)
 # delinq_2yrs --> <0.01% 
-numbers$delinq_2yrs<-replace_na(numbers$delinq_2yrs,0)
+df$delinq_2yrs<-replace_na(df$delinq_2yrs,0)
 #mths_since_last_delinq
 df$mths_since_last_delinq<-ifelse(df$delinq_2yrs==0,0,df$mths_since_last_delinq)
 df$mths_since_last_delinq<-replace_na(df$mths_since_last_delinq,0)
 cor(df$int_rate,df$mths_since_last_delinq)
 # inq_last_6mths --> <0.01%
-numbers$inq_last_6mths<-df$inq_last_6mths
 sum(is.na(df$inq_last_6mths))
 df$inq_last_6mths<-replace_na(df$inq_last_6mths,0)
 cor(df$inq_last_6mths,df$int_rate)
@@ -208,7 +214,41 @@ df$emp_length<-as.numeric(df$emp_length)
 df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
 cor(df$emp_length,df$int_rate)
 
+#NLP empl_title variable
 
+NLP<-VCorpus(VectorSource(NLP_df$emp_title))
+NLP<-tm_map(NLP,content_transformer(tolower))
+NLP<-tm_map(NLP,removeNumbers)
+NLP<-tm_map(NLP,removePunctuation)
+NLP<-tm_map(NLP,removeWords,stopwords())
+NLP<-tm_map(NLP,stemDocument, language = c("english")) 
+NLP<-tm_map(NLP,stripWhitespace) 
+NLP_m<-DocumentTermMatrix(NLP)
+NLP_m1<-removeSparseTerms(NLP_m, 0.999)
+NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
+NLP_dataset$int_rate<-df$int_rate
+cor(NLP_dataset$int_rate,NLP_dataset)
+#Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
+NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
+NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
+
+#NLP desc
+
+NLP_desc<-VCorpus(VectorSource(NLP_df$desc))
+NLP_desc<-tm_map(NLP_desc,content_transformer(tolower))
+NLP_desc<-tm_map(NLP_desc,removeNumbers)
+NLP_desc<-tm_map(NLP_desc,removePunctuation)
+NLP_desc<-tm_map(NLP_desc,removeWords,stopwords())
+NLP_desc<-tm_map(NLP_desc,stemDocument, language = c("english")) 
+NLP_desc<-tm_map(NLP_desc,stripWhitespace) 
+NLP_m_desc<-DocumentTermMatrix(NLP_desc)
+NLP_desc1<-removeSparseTerms(NLP_m_desc, 0.999)
+NLP_desc_dataset<-as.data.frame(as.matrix(NLP_desc1))
+NLP_desc_dataset$int_rate<-df$int_rate
+cor(NLP_desc_dataset$int_rate,NLP_desc_dataset)
+Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
+summary(Base_model)
+# in my opinion it is a bit redundant if we consider that we have also purpose, but may be some pattern also here
 
 #Candidate New variables
 
@@ -224,11 +264,12 @@ cor(df$int_rate,df$Has_something_wrong_done)
 #months_since_bad_situation
 df$months_since_bad_situation<-(df$mths_since_last_major_derog+df$mths_since_last_delinq+df$mths_since_last_record)
 cor(df$months_since_bad_situation,df$int_rate)
+
 #Loan_to_Wealth_index
 df$Loan_to_Wealth_index<-df$funded_amnt/(1+df$tot_cur_bal+7*df$annual_inc)
 cor(df$int_rate,df$Loan_to_Wealth_index)
-cor(Loan_to_Wealth_index,numbers$dti)
-cor(numbers$int_rate,numbers$dti)
+cor(Loan_to_Wealth_index,df$dti)
+cor(df$int_rate,numbers$dti)
 
 # a closer look at the int_rate, which is the label attribute
 # interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
@@ -244,6 +285,10 @@ cor(df$int_rate,df$tot_cur_bal)
 df$tot_coll_amt[is.na(df$tot_coll_amt)] <- mean(df$tot_coll_amt, na.rm = TRUE)
 df$tot_coll_amt<-replace_na(df$tot_coll_amt,0)
 cor(df$int_rate,df$tot_coll_amt)
+
+#Good_employment
+df$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", df$emp_title)==TRUE,1,0)
+cor(df$int_rate,df$Good_employment)
 
 #acc_now_delinq
 df$acc_now_delinq<-replace_na(df$acc_now_delinq,0)
@@ -263,8 +308,6 @@ boxplot(df$annual_inc, main="Annual Income")
 
 # corrplot(df)
 
-
-
 glimpse(df)
 summary(df)
 skim(df)
@@ -280,3 +323,5 @@ Test_data<-df[(nrow_train+1):nrow(df),]
 Base_model<- lm(int_rate~Has_something_wrong_done+Loan_to_Wealth_index+declared_dti+purpose+verification_status+home_ownership+revol_util+annual_inc+inq_last_6mths+zip_code,data=Train_data)
 summary(Base_model)
 vif(Base_model)
+
+
