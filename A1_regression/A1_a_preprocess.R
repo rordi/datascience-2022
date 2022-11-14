@@ -228,9 +228,7 @@ NLP_m1<-removeSparseTerms(NLP_m, 0.999)
 NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
 NLP_dataset$int_rate<-df$int_rate
 cor(NLP_dataset$int_rate,NLP_dataset)
-#Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
-NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
-NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
+
 
 #NLP desc
 
