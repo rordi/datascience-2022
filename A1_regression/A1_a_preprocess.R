@@ -14,28 +14,35 @@
 set.seed(1)
 rm(list=ls())
 
+# for ARM processors (Aplle M1/M2): need to compile some packages
+options(install.packages.compile.from.source = "always")
+
 # install package dependencies
 install.packages("corrplot")
-install.packages("dplyr")
-install.packages("scales")
 install.packages("data.table")
-install.packages("skimr")
+install.packages("dplyr")
 install.packages("fastDummies")
+install.packages("scales")
+install.packages("skimr")
+install.packages("SnowballC")
+install.packages("stringr")
+install.packages("tidyverse")
 install.packages("car")
 install.packages("tm")
-install.packages("SnowballC")
+
 # load packages
 library("corrplot")
-library("dplyr")
-library("scales")
-library("stringr")
 library("data.table")
-library("tidyverse")
-library("skimr")
+library("dplyr")
 library("fastDummies")
+library("scales")
+library("skimr")
+library("SnowballC")
+library("stringr")
+library("tidyverse")
 library("car")
 library("tm")
-library(SnowballC)
+
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
