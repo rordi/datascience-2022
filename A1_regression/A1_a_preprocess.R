@@ -94,11 +94,17 @@ df = subset(df, select = -c(
   total_rec_prncp
 ))
 
-# dump more attributes that we identified as irrelevant
+# drop more attributes that we identified as irrelevant
 df = subset(df, select = -c(
   id,             # only providing an order in which the applications were saved into the database otherwise meaningless
   member_id,      # too many unique values to be reasonably used
   url             # the url contains the id, only providing an order in which the applications were saved into the database otherwise meaningless
+))
+
+# drop attributes that have no description in the data dictionary (it is uncertain what exactly it is!)
+df = subset(df, select = -c(
+  verification_status,        # could be is_inc_v but not certain
+  verification_status_joint   # could be verified_status_joint but not certain
 ))
 
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
@@ -106,7 +112,7 @@ write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
 
 # =====================================================================
-# CREATE NLP FRAME FOR STRING ATTRIBUTES
+# CREATE NLP FRAME FOR FREE-TEXT STRING ATTRIBUTES
 # =====================================================================
 
 # create the NLP dataframe
@@ -153,25 +159,54 @@ boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
 # FEATURE SELECTION OF EXISTING FEATURES
 # =====================================================================
 
-# define a small helper function that describes a feature 
+#**
+#* function that describes a feature 
+#* 
 describe_feature <- function(feature, feature_name = "Feature") {
   # show number of NAs
   message(paste("Number of NAs: ", sum(is.na(feature))))
   
-  # replace NA with 0 and show how many % are zero-values
+
+  
+  # replace NA with 0
   feature_handled<-replace_na(feature,0)
-  message(paste("Zero-values in %: ", length(which(feature_handled == 0))/length(feature_handled)))
+  
+  # show number of unique values
+  message(paste("Number of unique values: ", sum(unique(feature))))
+  
+  # show number of zero values (relative)
+  message(paste("Sparsity relative: ", length(which(feature_handled == 0))/length(feature_handled)))
   
   # what is the correlation of the feature with our target variable?
   message(paste("Correlation with target variable: ", cor(feature_handled,df$int_rate)))
 
   # a deep-dive into the distribution
-  message("Summary of distribution: ")
+  message("Summary of distribution (also check the box plot and histogram): ")
   boxplot(feature_handled, main=feature_name, xlab=feature_name)
   hist(feature_handled, main=feature_name, xlab=feature_name)
   summary(feature_handled)
 }
 
+#**
+#* function to replace na with 0
+#*
+handle_na <- function(feature) {
+  feature_handled<-replace_na(feature,0)
+  return(feature_handled)
+}
+
+#**
+#* function to convert zip codes to numeric
+#* 
+handle_zip <- function(feature, divide_by = 1) {
+  feature_handled<-sub("xx", "", feature)
+  feature_handled<-as.numeric(feature_handled)
+  feature_handled<-round(feature_handled/divide_by, digits = 0)   # reducing to 1 or 2 digits does not improve the attribute
+  return(feature_handled)
+}
+
+# Features that are possibly dependent on each other
+# --------------------------------------------------------------------
 
 # loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
 # so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount but
@@ -180,12 +215,41 @@ describe_feature(df$loan_amnt, "Loan Amount")
 describe_feature(df$funded_amnt, "Funded Amount")
 describe_feature(df$funded_amnt_inv, "Funded Invested Amount")
 
-cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714 between loan and funded amount
+cor(df$loan_amnt, df$funded_amnt)        # correlation: 0.9992714 between loan and funded amount
 cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339 between loan and funded by investors amount
 df = subset(df, select = -c(
   funded_amnt,
   funded_amnt_inv
 ))
+
+# opened installment accounts (current, past 12 months, past 24 months)
+# because if any was opened in past 6 months, it will also be included in 12 and 24 months. 6 month shows strongest correlation with target,
+# thus we finally drop the 12m and 24m attributes
+describe_feature(df$open_il_6m, "Current Installment Accounts")
+describe_feature(df$open_il_12m, "Installment Accounts 12 months")
+describe_feature(df$open_il_24m, "Installment Accounts 24 months")
+
+cor(handle_na(df$open_il_6m), handle_na(df$open_il_12m))   # correlation: 0.56 between 6m and 12m
+cor(handle_na(df$open_il_6m), handle_na(df$open_il_24m))   # correlation: 0.67 between 6m and 24m
+cor(handle_na(df$open_il_12m), handle_na(df$open_il_24m))  # correlation: 0.85 between 12m and 24m
+df = subset(df, select = -c(
+  open_il_12m,
+  open_il_24m
+))
+
+
+# Categorical features
+# --------------------------------------------------------------------
+
+# zip codes shows a high number of unique values and low correlation to target
+# we also tried to use only 1 or 2 digits, but did not correlation, thus we drop
+describe_feature(handle_zip(df$zip_code))
+describe_feature(handle_zip(df$zip_code, divide_by = 10))
+describe_feature(handle_zip(df$zip_code, divide_by = 100))
+df = subset(df, select = -c(
+  zip_code
+))
+
 
 # verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
 numcol<-ncol(df)
@@ -223,7 +287,6 @@ df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_lengt
 # --> "url" includes and id and may be removed as it does not seem to bear any meaning
 # looks meaningless also to me
 # --> "desc" and "title" may need some NLP treatment
-# --> "zip_code" may need to be translated into latitude / longitude to be used as more appropriate geographical indicator
 # --> "last_pymnt_d" and "next_pymnt_d" are coded as dates, we may need to compute the delta in months instead
 #-->  "NAs in mths_since_last_delinq refers to people who never commit a crime"
 
