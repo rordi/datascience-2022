@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------
 #
 # Group A2
-# Dietrich Rordorf, Marco Lecci, Sarah Castratori
+# Dietrich Rordorf, Marco Lecci, Sarah Castratori!
 #
 # This script is used to preprocess the raw data from CSV to a useable
 # state.
@@ -334,7 +334,7 @@ skim(df)
 #train split (choose the number of raw by changing the percentage in the row_train)
 
 variables_for_prediction<-df[,c("Class_Income","emp_length2","total_acc","revol_bal","tot_cur_bal","purpose_car","Good_employment","inq_last_6mths","revol_util","Loan_to_Wealth_index","verification_status_Not Verified","declared_dti","Has_something_wrong_done","purpose_credit_card","purpose_debt_consolidation","purpose_house","purpose_medical","purpose_moving","purpose_other",
-                                "purpose_small_business","int_rate")]
+                        "purpose_small_business","int_rate")]
 nrow_train<-round(nrow(variables_for_prediction)*0.75,0)
 Train_data<-variables_for_prediction[0:nrow_train,]
 Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction),]
@@ -362,13 +362,12 @@ print(paste0('MAE: ' , mae(Test_data$int_rate,random_forest_prediction)))
 
 #AdaBoost
 model_adaboost <- gbm(int_rate ~.,data = Train_data,
-                      distribution = "gaussian",
-                      cv.folds = 10,
-                      shrinkage = .01,
-                      n.minobsinnode = 10,
-                      n.trees = 500)
+                                distribution = "gaussian",
+                                cv.folds = 10,
+                                shrinkage = .01,
+                                n.minobsinnode = 10,
+                                n.trees = 500)
 model_adaboost_prediction<-predict(model_adaboost ,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,model_adaboost_prediction)))
 
-# Multiple linear regression tree
 
