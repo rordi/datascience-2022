@@ -15,9 +15,13 @@
 # PRELIMINARIES
 # =====================================================================
 
-# allow for reproducible results
+# clear envionrment
 rm(list=ls())
-# memory.limit(700000) # this works only on Windows
+
+# set memory limit: this works only on Windows
+# memory.limit(700000)
+
+# allow for reproducible results
 set.seed(1)
 
 # install package dependencies
@@ -106,7 +110,7 @@ write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 # =====================================================================
 
 # create the NLP dataframe
-NLP_df<-df[,c("title","emp_title","desc")]
+df_nlp<-df[,c("title","emp_title","desc")]
 
 # remove string attributes from the main dataframe (we can copy back later interesting attributes from NLP frame after processing - our main dataframe should be purely numeric!)
 df = subset(df, select = -c(
@@ -117,51 +121,84 @@ df = subset(df, select = -c(
 
 
 # =====================================================================
-# FEATURE SELECTION AND ENGINEERING
+# INITIAL OBSERVATIONS
 # =====================================================================
 
 # print basic description of data frame
 dim(df)    # we have 49 variables left and ~798K observations
 str(df)
 
-# loan amount is the amount requested by the borrowers, while funded amounts are what investors commited and what was finally borrowed
-# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount.
-cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714
-cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339
-df = subset(df, select = -c(
-  funded_amnt,      # likely only available after interest rate was computed and published, highliy correlated with loan_amt
-  funded_amnt_inv   # likely only available after interest rate was computed and published, highliy correlated with loan_amt
-))
-
 # Initial observations:
-# --> after inital drop of variables, we have 49 variables left and ~798K observations
+# --> after initial drop of variables, we have 49 variables left and ~798K observations
 # --> existing versus new applicants: new applicants have many data attributes missing (0 or NA) --> we may drop some of these attributes
 # --> some variables have many missing values (NA) or many 0 values (sparse variables) --> some customers are existing customers of LC versus new customers that may not have many of these attributes
 # --> numeric variables have several orders of magnitude difference (we need scale numeric features)
 # --> some applications are "joint" applications (co-borrowers, see field "verified_status_joint"), can be interpreted in order "not verified" < "income source verified" < "verified by LC"
 # --> int_rate is our label variable (the one to predict)
+#
 # Possible preprocessing operations:
 #  - loan_amount: convert to num and scale / normalize
 #  - emp_title: code as dummy variables (check first the amount of values)
 #  - emp_length: convert to months (numeric) and scale / normalize
 #  - home_ownership: coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE or code as dummy vars
 
+
+# =====================================================================
+# FEATURE SELECTION OF EXISTING FEATURES
+# =====================================================================
+
+# define a small helper function that describes a feature 
+describe_feature <- function(feature) {
+  # show number of NAs
+  message(paste("Number of NAs: ", sum(is.na(feature))))
+  
+  # replace NA with 0 and show how many % are zero-values
+  feature_handled<-replace_na(feature,0)
+  message(paste("Zero-values in %: ", length(which(feature_handled == 0))/length(feature_handled)))
+  
+  # what is the correlation of the feature with our target variable?
+  message(paste("Correlation with target variable: ", cor(feature_handled,df$int_rate)))
+}
+
+
+# loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
+# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount but
+# drop the other two amount attributes!
+describe_feature(df$loan_amnt)
+describe_feature(df$funded_amnt)
+describe_feature(df$funded_amnt_inv)
+
+cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714 between loan and funded amount
+cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339 between loan and funded by investors amount
+df = subset(df, select = -c(
+  funded_amnt,
+  funded_amnt_inv
+))
+
 # verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
-df<-dummy_cols(df, select_columns = c("verification_status", "purpose","home_ownership","addr_state"),
-               remove_first_dummy = FALSE)
-dummies<-df[,53:121]
-cor(df$int_rate,dummies)
-cor1<-sort(as.vector(cor(df$int_rate,dummies)))
-cor1<-cor1*100
+df<-dummy_cols(df,
+               select_columns = c(
+                 "verification_status",
+                 "purpose",
+                 "home_ownership",
+                 "addr_state"
+                 ),
+               remove_first_dummy = FALSE
+               )
+df_dummies<-df[,53:121]
+cor(df$int_rate,df_dummies)
+cor_dummies<-sort(as.vector(cor(df$int_rate,df_dummies)))
+
 #  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
 #  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
 # --> "term" is coded as string such as " 36 months" 
-#!!!!! can we leave it out?
-# --> "emp_length" is coded as string such as "3 years" or "< 1 year"
+
+# emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
 df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
 df$emp_length<-as.numeric(df$emp_length)
-df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
-cor(df$emp_length,df$int_rate)
+describe_feature(df$emp_length)
+df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE) # replace NAs with mean
+describe_feature(df$emp_length) # improves the correlation
 
 df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_length<=5,1,2))
 #!!!!irrelevant we can leave it out: 0.6% correlation
@@ -296,7 +333,7 @@ cor(df$int_rate,df$acc_now_delinq)
 
 #NLP empl_title variable
 
-NLP<-VCorpus(VectorSource(NLP_df$emp_title))
+NLP<-VCorpus(VectorSource(df_nlp$emp_title))
 NLP<-tm_map(NLP,content_transformer(tolower))
 NLP<-tm_map(NLP,removeNumbers)
 NLP<-tm_map(NLP,removePunctuation)
@@ -315,7 +352,7 @@ NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP
 
 #NLP desc
 
-NLP_desc<-VCorpus(VectorSource(NLP_df$desc))
+NLP_desc<-VCorpus(VectorSource(df_nlp$desc))
 NLP_desc<-tm_map(NLP_desc,content_transformer(tolower))
 NLP_desc<-tm_map(NLP_desc,removeNumbers)
 NLP_desc<-tm_map(NLP_desc,removePunctuation)
@@ -366,9 +403,9 @@ df$tot_coll_amt<-replace_na(df$tot_coll_amt,0)
 cor(df$int_rate,df$tot_coll_amt)
 
 #Good_employment
-NLP_df$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", NLP_df$emp_title)==TRUE,1,0)
-cor(df$int_rate,NLP_df$Good_employment)
-df$Good_employment<-NLP_df$Good_employment
+df_nlp$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", df_nlp$emp_title)==TRUE,1,0)
+cor(df$int_rate,df_nlp$Good_employment)
+df$Good_employment<-df_nlp$Good_employment
 
 #(!) still possible to investigate how other variables can be combined to produce better predictors
 
