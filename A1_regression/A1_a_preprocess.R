@@ -1,5 +1,3 @@
-
-
 # ---------------------------------------------------------------------
 # Assignment 1 - REGRESSION - PREPROCESS
 # ---------------------------------------------------------------------
@@ -12,10 +10,14 @@
 #
 # =====================================================================
 
-# allow for reproducible results
 
+# =====================================================================
+# PRELIMINARIES
+# =====================================================================
+
+# allow for reproducible results
 rm(list=ls())
-memory.limit(700000)
+# memory.limit(700000) # this works only on Windows
 set.seed(1)
 
 # install package dependencies
@@ -50,11 +52,22 @@ library("Metrics")
 library("rpart")
 library("caret")
 library('gbm')
+
+
+# =====================================================================
+# LOAD RAW DATA
+# =====================================================================
+
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
 df <- fread("./A1_regression/LCdata.csv", sep=";")
+
+
+# =====================================================================
+# PURGE IRRELEVANT ATTRIBUTES
+# =====================================================================
 
 # drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
 df = subset(df, select = -c(
@@ -87,16 +100,25 @@ df = subset(df, select = -c(
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
-#NLP_frame
 
+# =====================================================================
+# CREATE NLP FRAME FOR STRING ATTRIBUTES
+# =====================================================================
+
+# create the NLP dataframe
 NLP_df<-df[,c("title","emp_title","desc")]
 
-# @TODO -- in a first step we drop some text-based content to simplify the model - we may later run experiments with NLP
+# remove string attributes from the main dataframe (we can copy back later interesting attributes from NLP frame after processing - our main dataframe should be purely numeric!)
 df = subset(df, select = -c(
   title,         # the title of the loan application -- @TODO -- code as dummy variables / NLP? (ca. 56K unique values)
   emp_title,     # the job title of the loan applicant -- @TODO -- code as dummy variables / NLP? (ca. 265K unique values)
   desc           # some free text provided by loan applicant on why the want / need to borrow -- @TODO -- use NLP? (86% null, ca. 112K unique values)
 ))
+
+
+# =====================================================================
+# FEATURE SELECTION AND ENGINEERING
+# =====================================================================
 
 # print basic description of data frame
 dim(df)    # we have 49 variables left and ~798K observations
@@ -170,51 +192,88 @@ percent(colMeans(is.na(numbers)))
 # (!) missing values should refer to 0 income people, I saw the description and are usually students or people that doesn't have an employment desc. However doesn't impact the type of replacement because there are 4.
 df$annual_inc<-replace_na(df$annual_inc,0)
 cor(df$int_rate,df$annual_inc)
-# dti
+
+# dti 
 df$dti_joint<-replace_na(df$dti_joint,0)
-cor(df$int_rate,df$dti)
-# delinq_2yrs --> <0.01% 
+cor(df$int_rate,df$dti) # 7.7%
+
+# new feature: declared_dti (combining dti and dti_joint) --> declared_dti brings benefit, correlation increase from 7.7% to 16.4%.
+df$declared_dti<-ifelse(df$dti_joint==0,df$dti,df$dti_joint)
+cor(df$int_rate,df$declared_dti) # 16.4%
+
+# delinq_2yrs --> <0.01% missing values
 df$delinq_2yrs<-replace_na(df$delinq_2yrs,0)
+
 #mths_since_last_delinq
 df$mths_since_last_delinq<-ifelse(df$delinq_2yrs==0,0,df$mths_since_last_delinq)
 df$mths_since_last_delinq<-replace_na(df$mths_since_last_delinq,0)
 cor(df$int_rate,df$mths_since_last_delinq)
-# inq_last_6mths --> <0.01%
+
+# inq_last_6mths --> almost 50% of records have an entry, and seems a good indicator
 sum(is.na(df$inq_last_6mths))
-df$inq_last_6mths<-replace_na(df$inq_last_6mths,0)
-cor(df$inq_last_6mths,df$int_rate)
-# inq_last_12mths -->
+df$inq_last_6mths<-replace_na(df$inq_last_6mths,0) # replace NA with 0
+df$inq_last_6mths<-abs(df$inq_last_6mths) # fix typing errors: negative values are not meaningful
+length(which(df$inq_last_6mths == 0))/length(df$inq_last_6mths) # 56% zero values (sparse attribute)
+cor(df$inq_last_6mths,df$int_rate) #22.8%
+
+# inq_last_12mths --> sparse attribute, weak correlation with int_rate
 sum(is.na(df$inq_last_12m))
-df$inq_last_12m<-ifelse(df$inq_last_12m<0,-df$inq_last_12m, df$inq_last_12m)
-df$inq_last_12m<-replace_na(df$inq_last_12m,0)
-# inq_fi
+df$inq_last_12m<-replace_na(df$inq_last_12m,0) # replace NA with 0
+df$inq_last_12m<-abs(df$inq_last_12m) # fix typing errors: negative values are not meaningful
+length(which(df$inq_last_12m == 0))/length(df$inq_last_12m) # 98% zero values (sparse attribute)
+cor(df$inq_last_12m,df$int_rate) # -0.001%
+cor(df$inq_last_12m,df$inq_last_6mths) #0.03% (although they seem independent, each inq in past 6 months is also an inq in past 12 months thus the two have dependency)
+
+# we drop inq_last_12mths
+df = subset(df, select = -c(
+  inq_last_12m
+))
+
+# inq_fi --> spare attribute, weak correlation
+sum(is.na(df$inq_last_12m))
 df$inq_fi<-replace_na(df$inq_fi,0)
-cor(df$inq_fi, df$int_rate)
-# mths_since_last_delinq --> 51% 
+length(which(df$inq_fi == 0))/length(df$inq_fi) # 99% zero values (sparse attribute)
+cor(df$inq_fi, df$int_rate) # 0.002
+
+# we drop inq_fi
+df = subset(df, select = -c(
+  inq_fi
+))
+
+# mths_since_last_delinq --> 51% missing values
 df$mths_since_last_delinq[is.na(df$mths_since_last_delinq)]<-ifelse(df$delinq_2yrs==0,0,df$delinq_2yrs*12)
 cor(df$int_rate,df$mths_since_last_delinq)
-# mths_since_last_record --> 84%
+
+# mths_since_last_record --> 84% missing values
 df$mths_since_last_record<-replace_na(df$mths_since_last_record,0)
 cor(df$int_rate,df$mths_since_last_record)
+
 # open_acc
+
 # pub_rec
 df$pub_rec<-replace_na(df$pub_rec,0)
 cor(df$int_rate,df$pub_rec)
+
 # revol_bal
 df$revol_bal<-replace_na(df$revol_bal,0)
 cor(df$int_rate,df$revol_bal)
+
 # revol_util (I investigated the NAs of the attribute but didn't find any explanation for the missing values. So I tried replacement with 0, mean and median, the latter had a slighly better correlation so I kept it.)
 df$revol_util[is.na(df$revol_util)] <- median(df$revol_util, na.rm = TRUE)
 cor(df$int_rate,df$revol_util)
+
 # total_acc
 df$total_acc[is.na(df$total_acc)] <- median(df$total_acc, na.rm = TRUE)
 cor(df$int_rate,df$total_acc)
+
 # collections_12_mths_ex_med (Power Law distribution, make sense to replace it with 0, btw it is irrelevant)
 df$collections_12_mths_ex_med<-replace_na(df$collections_12_mths_ex_med,0)
 cor(df$int_rate,df$total_acc)
+
 # mths_since_last_major_derog
 df$mths_since_last_major_derog<-replace_na(df$mths_since_last_major_derog,0)
 cor(df$int_rate,df$mths_since_last_major_derog)
+
 #All the open_il_"" (too many missing values and no replacement is useful to increase the correlation  the open_il because they are irrelevant)
 df$open_il_24m<-replace_na(df$open_il_24m,0)
 cor(df$int_rate,df$open_il_24m)
@@ -249,6 +308,7 @@ NLP_m1<-removeSparseTerms(NLP_m, 0.999)
 NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
 NLP_dataset$int_rate<-df$int_rate
 cor(NLP_dataset$int_rate,NLP_dataset)
+
 #Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
 NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
 NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
@@ -276,10 +336,7 @@ summary(Base_model)
 #Class_Income
 df$Class_Income<-ifelse(df$annual_inc<15000,0,ifelse(df$annual_inc>=15000 & df$annual_inc<35000,1,ifelse(df$annual_inc>=35000 & df$annual_inc<60000,2,ifelse(df$annual_inc>=60000 & df$annual_inc<100000,3,4))))
 cor(df$int_rate,df$Class_Income)
-#Declared_Dti
-#transformation dti into dti declared brings benefit, correlation increase from 7.7% to 16.4%.
-df$declared_dti<-ifelse(df$dti_joint==0,df$dti,df$dti_joint)
-cor(df$int_rate,df$declared_dti)
+
 
 #Has_something_wrong_done
 df$Has_something_wrong_done<-ifelse(df$pub_rec==0 & df$delinq_2yrs==0 & df$mths_since_last_major_derog==0,0,1)
