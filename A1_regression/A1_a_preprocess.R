@@ -1,69 +1,60 @@
+
+
 # ---------------------------------------------------------------------
 # Assignment 1 - REGRESSION - PREPROCESS
 # ---------------------------------------------------------------------
 #
 # Group A2
-# Dietrich Rordorf, Marco Lecci, Rizoanun Nasa, Sarah Castratori
+# Dietrich Rordorf, Marco Lecci, Sarah Castratori
 #
 # This script is used to preprocess the raw data from CSV to a useable
 # state.
 #
 # =====================================================================
 
-
-
-# =====================================================================
-# Preliminaries
-# =====================================================================
-
 # allow for reproducible results
-set.seed(1)
-rm(list=ls())
 
-# for ARM processors (Aplle M1/M2): need to compile some packages
-options(install.packages.compile.from.source = "always")
+rm(list=ls())
+memory.limit(700000)
+set.seed(1)
 
 # install package dependencies
 install.packages("corrplot")
-install.packages("data.table")
 install.packages("dplyr")
-install.packages("fastDummies")
 install.packages("scales")
+install.packages("data.table")
 install.packages("skimr")
-install.packages("SnowballC")
-install.packages("stringr")
-install.packages("tidyverse")
+install.packages("fastDummies")
 install.packages("car")
 install.packages("tm")
+install.packages("SnowballC")
+install.packages("randomForest")
+install.packages("Metrics")
+install.packages("caret")
+install.packages('gbm')
 
 # load packages
 library("corrplot")
-library("data.table")
 library("dplyr")
-library("fastDummies")
 library("scales")
-library("skimr")
-library("SnowballC")
 library("stringr")
+library("data.table")
 library("tidyverse")
+library("skimr")
+library("fastDummies")
 library("car")
 library("tm")
-
-
-# =====================================================================
-# Load raw data
-# =====================================================================
-
+library("SnowballC")
+library("randomForest")
+library("Metrics")
+library("rpart")
+library("caret")
+library('gbm')
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
 df <- fread("./A1_regression/LCdata.csv", sep=";")
-
-
-# =====================================================================
-# Discard features (feature selection)
-# =====================================================================
 
 # drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
 df = subset(df, select = -c(
@@ -86,7 +77,7 @@ df = subset(df, select = -c(
   total_rec_prncp
 ))
 
-# drop more attributes that we identified as irrelevant
+# dump more attributes that we identified as irrelevant
 df = subset(df, select = -c(
   id,             # only providing an order in which the applications were saved into the database otherwise meaningless
   member_id,      # too many unique values to be reasonably used
@@ -96,7 +87,8 @@ df = subset(df, select = -c(
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
-# create a separate data frame for NLP operations and copy over string attributes
+#NLP_frame
+
 NLP_df<-df[,c("title","emp_title","desc")]
 
 # @TODO -- in a first step we drop some text-based content to simplify the model - we may later run experiments with NLP
@@ -106,36 +98,27 @@ df = subset(df, select = -c(
   desc           # some free text provided by loan applicant on why the want / need to borrow -- @TODO -- use NLP? (86% null, ca. 112K unique values)
 ))
 
-# loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
-# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount and
-# drop the other two. Also, the two funded_amnt are highly correlated with loan_amount! Finally, fro a process perspective, we beieve that
-# likely the funded amounts are only available *after* the interest rate was computed and published.
+# print basic description of data frame
+dim(df)    # we have 49 variables left and ~798K observations
+str(df)
+
+# loan amount is the amount requested by the borrowers, while funded amounts are what investors commited and what was finally borrowed
+# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount.
 cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714
 cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339
 df = subset(df, select = -c(
-  funded_amnt,
-  funded_amnt_inv
+  funded_amnt,      # likely only available after interest rate was computed and published, highliy correlated with loan_amt
+  funded_amnt_inv   # likely only available after interest rate was computed and published, highliy correlated with loan_amt
 ))
 
-# print basic description of data frame
-dim(df)    # we have 47 variables left and ~798K observations
-str(df)
-
 # Initial observations:
-# --> after initial dropping of attributes, we have 47 variables left and ~798K observations
-# --> data is from 2007 to 2015
+# --> after inital drop of variables, we have 49 variables left and ~798K observations
 # --> existing versus new applicants: new applicants have many data attributes missing (0 or NA) --> we may drop some of these attributes
 # --> some variables have many missing values (NA) or many 0 values (sparse variables) --> some customers are existing customers of LC versus new customers that may not have many of these attributes
 # --> numeric variables have several orders of magnitude difference (we need scale numeric features)
 # --> some applications are "joint" applications (co-borrowers, see field "verified_status_joint"), can be interpreted in order "not verified" < "income source verified" < "verified by LC"
 # --> int_rate is our label variable (the one to predict)
-
-
-# =====================================================================
-# Features engineering
-# =====================================================================
-
-# Preprocessing operations per attribute:
+# Possible preprocessing operations:
 #  - loan_amount: convert to num and scale / normalize
 #  - emp_title: code as dummy variables (check first the amount of values)
 #  - emp_length: convert to months (numeric) and scale / normalize
@@ -143,28 +126,29 @@ str(df)
 
 # verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
 df<-dummy_cols(df, select_columns = c("verification_status", "purpose","home_ownership","addr_state"),
-           remove_first_dummy = FALSE)
-dummies<-df[,53:126]
+               remove_first_dummy = FALSE)
+dummies<-df[,53:121]
 cor(df$int_rate,dummies)
 cor1<-sort(as.vector(cor(df$int_rate,dummies)))
 cor1<-cor1*100
-#  - "annual_inc": some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
-#  - "verification_status": coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
-
-# - "emp_length" is coded as string such as "3 years" or "< 1 year"
-df$emp_length<-ifelse(df$emp_length=="< 1 year",0,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
+#  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
+#  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
+# --> "term" is coded as string such as " 36 months" 
+#!!!!! can we leave it out?
+# --> "emp_length" is coded as string such as "3 years" or "< 1 year"
+df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
 df$emp_length<-as.numeric(df$emp_length)
 df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
-cor(df$emp_length,df$int_rate) # 0.006457616, seems irrelevant we can leave it out
-df = subset(df, select = -c(
-  emp_length
-))
+cor(df$emp_length,df$int_rate)
+
+df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_length<=5,1,2))
+#!!!!irrelevant we can leave it out: 0.6% correlation
 
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
 # --> (out?) "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
 # --> "loan_status" is unstructured but includes a status that we may need to extract
 # --> "url" includes and id and may be removed as it does not seem to bear any meaning
- # looks meaningless also to me
+# looks meaningless also to me
 # --> "desc" and "title" may need some NLP treatment
 # --> "zip_code" may need to be translated into latitude / longitude to be used as more appropriate geographical indicator
 # --> "last_pymnt_d" and "next_pymnt_d" are coded as dates, we may need to compute the delta in months instead
@@ -174,6 +158,7 @@ df = subset(df, select = -c(
 # scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
 # threshold is 100'000 USD we will replace all outliers >100'000 USD with 100'000 USD. Then we scale from 0-1 scale.
 #
+# data is from 2007 to 2015
 
 # check for sparsity of attributes
 percent(colMeans(is.na(df)))
@@ -243,7 +228,12 @@ cor(df$int_rate,df$all_util)
 df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
 df$emp_length<-as.numeric(df$emp_length)
 df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
-cor(df$emp_length,df$int_rate)
+df$emp_length2<-ifelse(df$emp_length<5,0,1)
+cor(df$emp_length2,df$int_rate)
+
+#acc_now_delinq
+df$acc_now_delinq<-replace_na(df$acc_now_delinq,0)
+cor(df$int_rate,df$acc_now_delinq)
 
 #NLP empl_title variable
 
@@ -259,7 +249,9 @@ NLP_m1<-removeSparseTerms(NLP_m, 0.999)
 NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
 NLP_dataset$int_rate<-df$int_rate
 cor(NLP_dataset$int_rate,NLP_dataset)
-
+#Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
+NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
+NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
 
 #NLP desc
 
@@ -281,6 +273,9 @@ summary(Base_model)
 
 #Candidate New variables
 
+#Class_Income
+df$Class_Income<-ifelse(df$annual_inc<15000,0,ifelse(df$annual_inc>=15000 & df$annual_inc<35000,1,ifelse(df$annual_inc>=35000 & df$annual_inc<60000,2,ifelse(df$annual_inc>=60000 & df$annual_inc<100000,3,4))))
+cor(df$int_rate,df$Class_Income)
 #Declared_Dti
 #transformation dti into dti declared brings benefit, correlation increase from 7.7% to 16.4%.
 df$declared_dti<-ifelse(df$dti_joint==0,df$dti,df$dti_joint)
@@ -295,10 +290,9 @@ df$months_since_bad_situation<-(df$mths_since_last_major_derog+df$mths_since_las
 cor(df$months_since_bad_situation,df$int_rate)
 
 #Loan_to_Wealth_index
-df$Loan_to_Wealth_index<-df$funded_amnt/(1+df$tot_cur_bal+7*df$annual_inc)
+df$Loan_to_Wealth_index<-df$loan_amnt/(1+df$tot_cur_bal+7*df$annual_inc)
 cor(df$int_rate,df$Loan_to_Wealth_index)
-cor(Loan_to_Wealth_index,df$dti)
-cor(df$int_rate,numbers$dti)
+
 
 # a closer look at the int_rate, which is the label attribute
 # interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
@@ -306,7 +300,6 @@ summary(df$int_rate)
 hist(df$int_rate, main="Interest Rates")
 boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
 #tot_curr_bal (tried different replacement methods, mean has a better corr I kept it)
-df$tot_cur_bal<-df2$tot_cur_bal
 df$tot_cur_bal[is.na(df$tot_cur_bal)] <- mean(df$tot_cur_bal, na.rm = TRUE)
 cor(df$int_rate,df$tot_cur_bal)
 
@@ -316,12 +309,9 @@ df$tot_coll_amt<-replace_na(df$tot_coll_amt,0)
 cor(df$int_rate,df$tot_coll_amt)
 
 #Good_employment
-df$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", df$emp_title)==TRUE,1,0)
-cor(df$int_rate,df$Good_employment)
-
-#acc_now_delinq
-df$acc_now_delinq<-replace_na(df$acc_now_delinq,0)
-cor(df$int_rate,df$acc_now_delinq)
+NLP_df$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", NLP_df$emp_title)==TRUE,1,0)
+cor(df$int_rate,NLP_df$Good_employment)
+df$Good_employment<-NLP_df$Good_employment
 
 #(!) still possible to investigate how other variables can be combined to produce better predictors
 
@@ -343,14 +333,42 @@ skim(df)
 
 #train split (choose the number of raw by changing the percentage in the row_train)
 
-nrow_train<-round(nrow(df)*0.75,0)
-Train_data<-df[0:nrow_train,]
-Test_data<-df[(nrow_train+1):nrow(df),]
+variables_for_prediction<-df[,c("Class_Income","emp_length2","total_acc","revol_bal","tot_cur_bal","purpose_car","Good_employment","inq_last_6mths","revol_util","Loan_to_Wealth_index","verification_status_Not Verified","declared_dti","Has_something_wrong_done","purpose_credit_card","purpose_debt_consolidation","purpose_house","purpose_medical","purpose_moving","purpose_other",
+                                "purpose_small_business","int_rate")]
+nrow_train<-round(nrow(variables_for_prediction)*0.75,0)
+Train_data<-variables_for_prediction[0:nrow_train,]
+Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction),]
 
-# model
+# Models
 
-Base_model<- lm(int_rate~Has_something_wrong_done+Loan_to_Wealth_index+declared_dti+purpose+verification_status+home_ownership+revol_util+annual_inc+inq_last_6mths+zip_code,data=Train_data)
-summary(Base_model)
+# Multiple Linear regression
+Linear_regression<- lm(int_rate~.,data=Train_data)
+Linear_regression_prediction<-predict(Linear_regression,Test_data)
+print(paste0('MAE: ' , mae(Test_data$int_rate,Linear_regression_prediction)))
+summary(Linear_regression)
 vif(Base_model)
 
+#Regression tree
+
+Regression_tree <- rpart(int_rate ~., data=Train_data, control=rpart.control(cp=.0001))
+Regression_tree_prediction<-predict(Regression_tree,Test_data)
+print(paste0('MAE: ' , mae(Test_data$int_rate,Regression_tree_prediction)))
+
+# Random Forest
+
+random_forest <- randomForest(int_rate~., data=Train_data, maxnodes = 100, mtry=10, ntree = 200 )
+random_forest_prediction<-predict(random_forest,Test_data)
+print(paste0('MAE: ' , mae(Test_data$int_rate,random_forest_prediction)))
+
+#AdaBoost
+model_adaboost <- gbm(int_rate ~.,data = Train_data,
+                      distribution = "gaussian",
+                      cv.folds = 10,
+                      shrinkage = .01,
+                      n.minobsinnode = 10,
+                      n.trees = 500)
+model_adaboost_prediction<-predict(model_adaboost ,Test_data)
+print(paste0('MAE: ' , mae(Test_data$int_rate,model_adaboost_prediction)))
+
+# Multiple linear regression tree
 
