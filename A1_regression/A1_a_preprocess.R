@@ -10,6 +10,12 @@
 #
 # =====================================================================
 
+
+
+# =====================================================================
+# Preliminaries
+# =====================================================================
+
 # allow for reproducible results
 set.seed(1)
 rm(list=ls())
@@ -43,11 +49,21 @@ library("tidyverse")
 library("car")
 library("tm")
 
+
+# =====================================================================
+# Load raw data
+# =====================================================================
+
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
 df <- fread("./A1_regression/LCdata.csv", sep=";")
+
+
+# =====================================================================
+# Discard features (feature selection)
+# =====================================================================
 
 # drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
 df = subset(df, select = -c(
@@ -70,7 +86,7 @@ df = subset(df, select = -c(
   total_rec_prncp
 ))
 
-# dump more attributes that we identified as irrelevant
+# drop more attributes that we identified as irrelevant
 df = subset(df, select = -c(
   id,             # only providing an order in which the applications were saved into the database otherwise meaningless
   member_id,      # too many unique values to be reasonably used
@@ -80,8 +96,7 @@ df = subset(df, select = -c(
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
-#NLP_frame
-
+# create a separate data frame for NLP operations and copy over string attributes
 NLP_df<-df[,c("title","emp_title","desc")]
 
 # @TODO -- in a first step we drop some text-based content to simplify the model - we may later run experiments with NLP
@@ -91,27 +106,36 @@ df = subset(df, select = -c(
   desc           # some free text provided by loan applicant on why the want / need to borrow -- @TODO -- use NLP? (86% null, ca. 112K unique values)
 ))
 
-# print basic description of data frame
-dim(df)    # we have 49 variables left and ~798K observations
-str(df)
-
-# loan amount is the amount requested by the borrowers, while funded amounts are what investors commited and what was finally borrowed
-# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount.
+# loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
+# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount and
+# drop the other two. Also, the two funded_amnt are highly correlated with loan_amount! Finally, fro a process perspective, we beieve that
+# likely the funded amounts are only available *after* the interest rate was computed and published.
 cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714
 cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339
 df = subset(df, select = -c(
-  funded_amnt,      # likely only available after interest rate was computed and published, highliy correlated with loan_amt
-  funded_amnt_inv   # likely only available after interest rate was computed and published, highliy correlated with loan_amt
+  funded_amnt,
+  funded_amnt_inv
 ))
 
+# print basic description of data frame
+dim(df)    # we have 47 variables left and ~798K observations
+str(df)
+
 # Initial observations:
-# --> after inital drop of variables, we have 49 variables left and ~798K observations
+# --> after initial dropping of attributes, we have 47 variables left and ~798K observations
+# --> data is from 2007 to 2015
 # --> existing versus new applicants: new applicants have many data attributes missing (0 or NA) --> we may drop some of these attributes
 # --> some variables have many missing values (NA) or many 0 values (sparse variables) --> some customers are existing customers of LC versus new customers that may not have many of these attributes
 # --> numeric variables have several orders of magnitude difference (we need scale numeric features)
 # --> some applications are "joint" applications (co-borrowers, see field "verified_status_joint"), can be interpreted in order "not verified" < "income source verified" < "verified by LC"
 # --> int_rate is our label variable (the one to predict)
-# Possible preprocessing operations:
+
+
+# =====================================================================
+# Features engineering
+# =====================================================================
+
+# Preprocessing operations per attribute:
 #  - loan_amount: convert to num and scale / normalize
 #  - emp_title: code as dummy variables (check first the amount of values)
 #  - emp_length: convert to months (numeric) and scale / normalize
@@ -124,16 +148,17 @@ dummies<-df[,53:126]
 cor(df$int_rate,dummies)
 cor1<-sort(as.vector(cor(df$int_rate,dummies)))
 cor1<-cor1*100
-#  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
-#  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
-# --> "term" is coded as string such as " 36 months" 
-#!!!!! can we leave it out?
-# --> "emp_length" is coded as string such as "3 years" or "< 1 year"
-df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
+#  - "annual_inc": some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
+#  - "verification_status": coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
+
+# - "emp_length" is coded as string such as "3 years" or "< 1 year"
+df$emp_length<-ifelse(df$emp_length=="< 1 year",0,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
 df$emp_length<-as.numeric(df$emp_length)
 df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
-cor(df$emp_length,df$int_rate)
-#!!!!irrelevant we can leave it out: 0.6% correlation
+cor(df$emp_length,df$int_rate) # 0.006457616, seems irrelevant we can leave it out
+df = subset(df, select = -c(
+  emp_length
+))
 
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
 # --> (out?) "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
@@ -149,7 +174,6 @@ cor(df$emp_length,df$int_rate)
 # scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
 # threshold is 100'000 USD we will replace all outliers >100'000 USD with 100'000 USD. Then we scale from 0-1 scale.
 #
-# data is from 2007 to 2015
 
 # check for sparsity of attributes
 percent(colMeans(is.na(df)))
