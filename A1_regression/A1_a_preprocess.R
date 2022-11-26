@@ -62,8 +62,10 @@ library('gbm')
 # LOAD RAW DATA
 # =====================================================================
 
-# unzip raw data
-unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
+# NOTE: path are relative to the root of the project, thus paths need to start with "./A1_regression/" prefix !
+
+# unzip raw data (uncomment line below if you do not have the CSV yet locally)
+# unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
 df <- fread("./A1_regression/LCdata.csv", sep=";")
@@ -101,11 +103,11 @@ df = subset(df, select = -c(
   url             # the url contains the id, only providing an order in which the applications were saved into the database otherwise meaningless
 ))
 
-# drop attributes that have no description in the data dictionary (it is uncertain what exactly it is!)
-df = subset(df, select = -c(
-  verification_status,        # could be is_inc_v but not certain
-  verification_status_joint   # could be verified_status_joint but not certain
-))
+# drop attributes that have no description in the data dictionary (it is uncertain what exactly it is!) @TODO - commented out, Marco found that some are useful
+# df = subset(df, select = -c(
+#  verification_status,        # could be is_inc_v but not certain
+#  verification_status_joint   # could be verified_status_joint but not certain
+#))
 
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
@@ -133,6 +135,11 @@ df = subset(df, select = -c(
 # print basic description of data frame
 dim(df)    # we have 49 variables left and ~798K observations
 str(df)
+glimpse(df)
+skim(df)
+
+# we need to filter for numeric variables to use corrplot and also handle NAs
+# corrplot(df)
 
 # we take a closer look at the int_rate, which is our target variable!
 # @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
@@ -141,23 +148,37 @@ hist(df$int_rate, main="Interest Rates")
 boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
 
 # Initial observations:
+#
 # --> after initial drop of variables, we have 49 variables left and ~798K observations
 # --> existing versus new applicants: new applicants have many data attributes missing (0 or NA) --> we may drop some of these attributes
 # --> some variables have many missing values (NA) or many 0 values (sparse variables) --> some customers are existing customers of LC versus new customers that may not have many of these attributes
-# --> numeric variables have several orders of magnitude difference (we need scale numeric features)
+# --> numeric variables have several orders of magnitude difference (we need scale numeric variables)
 # --> some applications are "joint" applications (co-borrowers, see field "verified_status_joint"), can be interpreted in order "not verified" < "income source verified" < "verified by LC"
 # --> int_rate is our label variable (the one to predict)
+# --> several variables show a NA count of exactly 25 (could be that some rows are all NAs)
+# --> policy_code has always the same value (1) - we can drop it
+# --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
+# --> (out?) "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
+# --> "loan_status" is unstructured but includes a status that we may need to extract
+# --> "desc" and "title" may need some NLP treatment
+# --> "last_pymnt_d" and "next_pymnt_d" are coded as dates, we may need to compute the delta in months instead
+# -->  "NAs in mths_since_last_delinq refers to people who never commit a crime"
+# --> annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
+# --> verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
+# --> "term" is coded as string such as " 36 months" 
 #
-# Possible preprocessing operations:
-#  - loan_amount: convert to num and scale / normalize
-#  - emp_title: code as dummy variables (check first the amount of values)
-#  - emp_length: convert to months (numeric) and scale / normalize
-#  - home_ownership: coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE or code as dummy vars
+# scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
+# threshold is 150'000 USD we will replace all outliers >150'000 USD with 150'000 USD. Then we scale from 0-1 scale.
+#
+# data is from 2007 to 2015
 
 
 # =====================================================================
 # FEATURE SELECTION OF EXISTING FEATURES
 # =====================================================================
+
+# In a next step we define our own function "describe_feature" and run it on every numerical attribute. The results are 
+# recorded in a Google Sheet for better overview: https://docs.google.com/spreadsheets/d/1d9JnSfMhEuIjDAsVg6EK4g-UefP_-IXGu-S9b9Y1gbY
 
 #**
 #* function that describes a feature 
@@ -165,9 +186,7 @@ boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
 describe_feature <- function(feature, feature_name = "Feature") {
   # show number of NAs
   message(paste("Number of NAs: ", sum(is.na(feature))))
-  
 
-  
   # replace NA with 0
   feature_handled<-replace_na(feature,0)
   
@@ -179,7 +198,15 @@ describe_feature <- function(feature, feature_name = "Feature") {
   
   # what is the correlation of the feature with our target variable?
   message(paste("Correlation with target variable: ", cor(feature_handled,df$int_rate)))
-
+  
+  # outliers detection
+  outliers<-boxplot.stats(feature_handled)$out
+  outliers_count<-length(outliers)
+  message(paste("Potential outliers (1.5 * IQR): ", outliers_count))
+  if (outliers_count>0) {
+    message(paste("Potential outlier range of values: ", toString(range(outliers))))
+  }
+  
   # a deep-dive into the distribution
   message("Summary of distribution (also check the box plot and histogram): ")
   boxplot(feature_handled, main=feature_name, xlab=feature_name)
@@ -203,6 +230,13 @@ handle_zip <- function(feature, divide_by = 1) {
   feature_handled<-as.numeric(feature_handled)
   feature_handled<-round(feature_handled/divide_by, digits = 0)   # reducing to 1 or 2 digits does not improve the attribute
   return(feature_handled)
+}
+
+#**
+#* function to apply a threshold value to outliers
+#* 
+apply_threshold <- function(feature, threshold = 1) {
+  feature_handled<-ifelse(feature>threshold, threshold, feature)
 }
 
 # Features that are possibly dependent on each other
@@ -243,12 +277,13 @@ df = subset(df, select = -c(
 
 # zip codes shows a high number of unique values and low correlation to target
 # we also tried to use only 1 or 2 digits, but did not correlation, thus we drop
-describe_feature(handle_zip(df$zip_code))
-describe_feature(handle_zip(df$zip_code, divide_by = 10))
-describe_feature(handle_zip(df$zip_code, divide_by = 100))
+describe_feature(handle_zip(df$zip_code), "ZIP Codes 3 digits")
+describe_feature(handle_zip(df$zip_code, divide_by = 10), "ZIP Codes 2 digits")
+describe_feature(handle_zip(df$zip_code, divide_by = 100), "ZIP Codes 1 digits")
 df = subset(df, select = -c(
   zip_code
 ))
+
 
 
 # verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
@@ -267,10 +302,6 @@ df_dummies<-df[,(numcol+1):ncol(df)]
 cor(df$int_rate,df_dummies)
 cor_dummies<-sort(as.vector(cor(df$int_rate,df_dummies)))
 
-#  - annual_inc: some missing values, probably an important predictor; we need to find a strategy to sample for the missing values (mean, median, nearest neighbour)
-#  - verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
-# --> "term" is coded as string such as " 36 months" 
-
 # emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
 df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",10,df$emp_length)))))))))))
 df$emp_length<-as.numeric(df$emp_length)
@@ -281,31 +312,16 @@ describe_feature(df$emp_length, "Employment Length (mean applied") # improves th
 df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_length<=5,1,2))
 #!!!!irrelevant we can leave it out: 0.6% correlation
 
-# --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
-# --> (out?) "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
-# --> "loan_status" is unstructured but includes a status that we may need to extract
-# --> "url" includes and id and may be removed as it does not seem to bear any meaning
-# looks meaningless also to me
-# --> "desc" and "title" may need some NLP treatment
-# --> "last_pymnt_d" and "next_pymnt_d" are coded as dates, we may need to compute the delta in months instead
-#-->  "NAs in mths_since_last_delinq refers to people who never commit a crime"
 
 
-# scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
-# threshold is 100'000 USD we will replace all outliers >100'000 USD with 100'000 USD. Then we scale from 0-1 scale.
-#
-# data is from 2007 to 2015
+# annual_inc
+# (!) missing values should refer to 0 income people, I saw the description and are usually students or people
+# that doesn't have an employment desc. However doesn't impact the type of replacement because there are 4.
+describe_feature(df$annual_inc, "Annual Income") # -0.073 correlation
+df$annual_inc<-handle_na(df$annual_inc)
+df$annual_inc<-apply_threshold(df$annual_inc, threshold = 150000)
+describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.112 correlation
 
-# check for sparsity of attributes
-percent(colMeans(is.na(df)))
-percent(colMeans(is.na(numbers)))
-
-
-# missing values in:
-# annual_inc --> <0.01%
-# (!) missing values should refer to 0 income people, I saw the description and are usually students or people that doesn't have an employment desc. However doesn't impact the type of replacement because there are 4.
-df$annual_inc<-replace_na(df$annual_inc,0)
-cor(df$int_rate,df$annual_inc)
 
 # dti 
 df$dti_joint<-replace_na(df$dti_joint,0)
@@ -489,13 +505,6 @@ hist(df$annual_inc, main="Annual Income")
 boxplot(df$annual_inc, main="Annual Income")
 
 
-# we need to filter for numeric attrs to use corrplot
-
-# corrplot(df)
-
-glimpse(df)
-summary(df)
-skim(df)
 
 #train split (choose the number of raw by changing the percentage in the row_train)
 
