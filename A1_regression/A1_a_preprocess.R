@@ -128,6 +128,12 @@ df = subset(df, select = -c(
 dim(df)    # we have 49 variables left and ~798K observations
 str(df)
 
+# we take a closer look at the int_rate, which is our target variable!
+# @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
+summary(df$int_rate)
+hist(df$int_rate, main="Interest Rates")
+boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
+
 # Initial observations:
 # --> after initial drop of variables, we have 49 variables left and ~798K observations
 # --> existing versus new applicants: new applicants have many data attributes missing (0 or NA) --> we may drop some of these attributes
@@ -148,7 +154,7 @@ str(df)
 # =====================================================================
 
 # define a small helper function that describes a feature 
-describe_feature <- function(feature) {
+describe_feature <- function(feature, feature_name = "Feature") {
   # show number of NAs
   message(paste("Number of NAs: ", sum(is.na(feature))))
   
@@ -158,15 +164,21 @@ describe_feature <- function(feature) {
   
   # what is the correlation of the feature with our target variable?
   message(paste("Correlation with target variable: ", cor(feature_handled,df$int_rate)))
+
+  # a deep-dive into the distribution
+  message("Summary of distribution: ")
+  boxplot(feature_handled, main=feature_name, xlab=feature_name)
+  hist(feature_handled, main=feature_name, xlab=feature_name)
+  summary(feature_handled)
 }
 
 
 # loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
 # so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount but
 # drop the other two amount attributes!
-describe_feature(df$loan_amnt)
-describe_feature(df$funded_amnt)
-describe_feature(df$funded_amnt_inv)
+describe_feature(df$loan_amnt, "Loan Amount")
+describe_feature(df$funded_amnt, "Funded Amount")
+describe_feature(df$funded_amnt_inv, "Funded Invested Amount")
 
 cor(df$loan_amnt, df$funded_amnt)       # correlation: 0.9992714 between loan and funded amount
 cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339 between loan and funded by investors amount
@@ -176,6 +188,8 @@ df = subset(df, select = -c(
 ))
 
 # verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
+numcol<-ncol(df)
+numcol
 df<-dummy_cols(df,
                select_columns = c(
                  "verification_status",
@@ -185,7 +199,7 @@ df<-dummy_cols(df,
                  ),
                remove_first_dummy = FALSE
                )
-df_dummies<-df[,53:121]
+df_dummies<-df[,(numcol+1):ncol(df)]
 cor(df$int_rate,df_dummies)
 cor_dummies<-sort(as.vector(cor(df$int_rate,df_dummies)))
 
@@ -194,11 +208,11 @@ cor_dummies<-sort(as.vector(cor(df$int_rate,df_dummies)))
 # --> "term" is coded as string such as " 36 months" 
 
 # emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
-df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
+df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",10,df$emp_length)))))))))))
 df$emp_length<-as.numeric(df$emp_length)
-describe_feature(df$emp_length)
+describe_feature(df$emp_length, "Employment Length")
 df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE) # replace NAs with mean
-describe_feature(df$emp_length) # improves the correlation
+describe_feature(df$emp_length, "Employment Length (mean applied") # improves the correlation
 
 df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_length<=5,1,2))
 #!!!!irrelevant we can leave it out: 0.6% correlation
@@ -388,11 +402,6 @@ df$Loan_to_Wealth_index<-df$loan_amnt/(1+df$tot_cur_bal+7*df$annual_inc)
 cor(df$int_rate,df$Loan_to_Wealth_index)
 
 
-# a closer look at the int_rate, which is the label attribute
-# interest rate is in the range 5.32 - 28.99 --> we may divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude
-summary(df$int_rate)
-hist(df$int_rate, main="Interest Rates")
-boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
 #tot_curr_bal (tried different replacement methods, mean has a better corr I kept it)
 df$tot_cur_bal[is.na(df$tot_cur_bal)] <- mean(df$tot_cur_bal, na.rm = TRUE)
 cor(df$int_rate,df$tot_cur_bal)
