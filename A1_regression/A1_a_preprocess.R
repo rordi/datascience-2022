@@ -11,6 +11,7 @@
 # =====================================================================
 
 
+
 # =====================================================================
 # PRELIMINARIES
 # =====================================================================
@@ -18,7 +19,7 @@
 # clear envionrment
 rm(list=ls())
 
-# set memory limit: this works only on Windows
+# set memory limit: this works only on Windows (you can copy-paste the below commented-out command into console and run it there)
 # memory.limit(700000)
 
 # allow for reproducible results
@@ -35,6 +36,7 @@ install.packages("car")
 install.packages("tm")
 install.packages("SnowballC")
 install.packages("randomForest")
+install.packages("reshape")
 install.packages("Metrics")
 install.packages("caret")
 install.packages('gbm')
@@ -52,10 +54,12 @@ library("car")
 library("tm")
 library("SnowballC")
 library("randomForest")
+library("reshape")
 library("Metrics")
 library("rpart")
 library("caret")
 library('gbm')
+
 
 
 # =====================================================================
@@ -65,11 +69,13 @@ library('gbm')
 # NOTE: path are relative to the root of the project, thus paths need to start with "./A1_regression/" prefix !
 
 # unzip raw data (uncomment line below if you do not have the CSV yet locally)
-# unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
+#unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
 df_raw <- fread("./A1_regression/LCdata.csv", sep=";")
 df<-df_raw
+
+
 
 # =====================================================================
 # PURGE IRRELEVANT ATTRIBUTES
@@ -104,13 +110,14 @@ df = subset(df, select = -c(
 ))
 
 # drop attributes that have no description in the data dictionary (it is uncertain what exactly it is!) @TODO - commented out, Marco found that some are useful
-# df = subset(df, select = -c(
+#df = subset(df, select = -c(
 #  verification_status,        # could be is_inc_v but not certain
 #  verification_status_joint   # could be verified_status_joint but not certain
 #))
 
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
 write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
+
 
 
 # =====================================================================
@@ -128,12 +135,13 @@ df = subset(df, select = -c(
 ))
 
 
+
 # =====================================================================
 # INITIAL OBSERVATIONS
 # =====================================================================
 
 # print basic description of data frame
-dim(df)    # we have 49 variables left and ~798K observations
+dim(df)    # we have 49 variables left after inital selection and ~798K observations
 str(df)
 glimpse(df)
 skim(df)
@@ -149,7 +157,7 @@ skim(df)
 # --> numeric variables have several orders of magnitude difference (we need scale numeric variables)
 # --> some applications are "joint" applications (co-borrowers, see field "verified_status_joint"), can be interpreted in order "not verified" < "income source verified" < "verified by LC"
 # --> int_rate is our label variable (the one to predict)
-# --> several variables show a NA count of exactly 25 (could be that some rows are all NAs)
+# --> several variables show a NA count of exactly 25 (and seems that it is ~25 rows that ar mostly NAs)
 # --> policy_code has always the same value (1) - we can drop it
 # --> "home_ownership" is coded as string, may possible be interpreted in an order NONE < RENT < MORTGAGE
 # --> (out?) "issue_d" seems to indicate when the loan was issued - this variable is not future-proof cannot be used like this - may somehow need to convert into age of the loan in months
@@ -167,25 +175,44 @@ skim(df)
 # data is from 2007 to 2015
 
 
+
 # =====================================================================
-# FEATURE SELECTION OF EXISTING FEATURES
+# HANDLE EMPTY RECORDS
 # =====================================================================
 
-# In a next step we define our own function "describe_feature" and run it on every numerical attribute. The results are 
-# recorded in a Google Sheet for better overview: https://docs.google.com/spreadsheets/d/1d9JnSfMhEuIjDAsVg6EK4g-UefP_-IXGu-S9b9Y1gbY
+# it seems some attributes have excatly 25 NAs - a closer look reveals that it is the same record IDs in different attributes
+# (meaning that these rows seem filled with missing values)
+which(is.na(df$delinq_2yrs))
+which(is.na(df$inq_last_6mths))
+which(is.na(df$open_acc))
+which(is.na(df$pub_rec))
+which(is.na(df$total_acc))
+which(is.na(df$acc_now_delinq))
+
+# drop those 25 empty rows from the dataframe
+df<-df[-which(is.na(df$delinq_2yrs))]
+
+
+
+# =====================================================================
+# HELPER FUNCTIONS TO DESCRIBE AND PREPROCESS FEATURES
+# =====================================================================
+
+# select the functions and run them once to define them in the env. Then you can also use them on the command line !
 
 #**
 #* function that describes a feature 
+#* usage example: describe_feature(df$int_rate, "Interest Rate")
 #* 
 describe_feature <- function(feature, feature_name = "Feature") {
   # show number of NAs
   message(paste("Number of NAs: ", sum(is.na(feature))))
-
+  
   # replace NA with 0
   feature_handled<-replace_na(feature,0)
   
   # show number of unique values
-  message(paste("Number of unique values: ", sum(unique(feature))))
+  message(paste("Number of unique values: ", length(unique(feature_handled))))
   
   # show number of zero values (relative)
   message(paste("Sparsity relative: ", length(which(feature_handled == 0))/length(feature_handled)))
@@ -202,17 +229,18 @@ describe_feature <- function(feature, feature_name = "Feature") {
   }
   
   # a deep-dive into the distribution
+  message(paste("98th, 99th and 99.9th percentiles: ", toString(quantile(feature_handled, c(.98, .99, .999)))))
   message("Summary of distribution (also check the box plot and histogram): ")
   boxplot(feature_handled, main=feature_name, xlab=feature_name)
   hist(feature_handled, main=feature_name, xlab=feature_name)
-  summary(feature_handled)
+  summary(feature_handled) # keep it as last command in function
 }
 
 #**
 #* function to replace na with 0
 #*
-handle_na <- function(feature) {
-  feature_handled<-replace_na(feature,0)
+handle_na <- function(feature, replace_with = 0) {
+  feature_handled<-replace_na(feature, replace_with)
   return(feature_handled)
 }
 
@@ -232,6 +260,16 @@ handle_zip <- function(feature, divide_by = 1) {
 apply_threshold <- function(feature, threshold = 1) {
   feature_handled<-ifelse(feature>threshold, threshold, feature)
 }
+
+
+
+# =====================================================================
+# FEATURE SELECTION OF EXISTING FEATURES
+# =====================================================================
+
+# In a next step we define our own function "describe_feature" and run it on every numerical attribute. The results are 
+# recorded in a Google Sheet for better overview: https://docs.google.com/spreadsheets/d/1d9JnSfMhEuIjDAsVg6EK4g-UefP_-IXGu-S9b9Y1gbY
+
 
 
 # Target variable check
@@ -268,8 +306,7 @@ df = subset(df, select = -c(
 describe_feature(df$open_il_6m, "Current Installment Accounts")
 describe_feature(df$open_il_12m, "Installment Accounts 12 months")
 describe_feature(df$open_il_24m, "Installment Accounts 24 months")
-
-cor(handle_na(df$open_il_6m), handle_na(df$open_il_12m))   # correlation: 0.56 between 6m and 12m
+cor(handle_na(df$open_il_6m), handle_na(df$open_il_12m))   # correlation: 0.57 between 6m and 12m
 cor(handle_na(df$open_il_6m), handle_na(df$open_il_24m))   # correlation: 0.67 between 6m and 24m
 cor(handle_na(df$open_il_12m), handle_na(df$open_il_24m))  # correlation: 0.85 between 12m and 24m
 df = subset(df, select = -c(
@@ -291,11 +328,11 @@ df = subset(df, select = -c(
 ))
 
 
+# Dummy variables
+# --------------------------------------------------------------------
 
-# verification status verified seems to be a good predictor, states not really and also purpose seems to have poor correlations
-numcol<-ncol(df)
-numcol
-df<-dummy_cols(df,
+# create separate df with dummy variables for some of the string attributes
+df_dummies<-dummy_cols(df,
                select_columns = c(
                  "verification_status",
                  "purpose",
@@ -304,9 +341,33 @@ df<-dummy_cols(df,
                  ),
                remove_first_dummy = FALSE
                )
-df_dummies<-df[,(numcol+1):ncol(df)]
-cor(df$int_rate,df_dummies)
-cor_dummies<-sort(as.vector(cor(df$int_rate,df_dummies)))
+
+# remove the columns from df (we will add back dummies selectively for those that are interesting)
+df = subset(df, select = -c(
+  verification_status,
+  purpose,
+  home_ownership,
+  addr_state
+))
+
+# compute the correlations with target variable for all dummy variable and keep only those with corr coeff < -0.05 or > 0.05
+z<-cor(df$int_rate,df_dummies)
+z[z == 1] <- NA #drop perfect
+z[abs(z) < 0.05] <- NA # drop less than abs(0.5)
+z<-na.omit(melt(z)) # melt! 
+z[order(-abs(z$value)),] # sort
+
+# the dummy vars that seem interesting are:
+#
+# verification_status_Not Verified -0.21797238
+#     verification_status_Verified  0.21077114
+#              purpose_credit_card -0.18464138
+#       purpose_debt_consolidation  0.09647653
+#                    purpose_other  0.09198582
+#           purpose_small_business  0.07394402
+#          home_ownership_MORTGAGE -0.06152897
+#              home_ownership_RENT  0.06176908
+
 
 # emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
 df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",10,df$emp_length)))))))))))
@@ -329,8 +390,13 @@ df$annual_inc<-apply_threshold(df$annual_inc, threshold = 150000)
 describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.112 correlation
 
 
-# dti 
-df$dti_joint<-replace_na(df$dti_joint,0)
+# dti
+describe_feature(df$dti) # has outliers, threshold at 99.9% percentile (39.73) seems good
+df$dti<-apply_threshold(df$dti, threshold = 39.73) # produces nice bell.shaped curve --> replace NA with median
+df$dti = handle_na(df$dti_joint)
+
+df$dti_joint = handle_na(df$dti_joint)
+<-replace_na(df$dti_joint,0)
 cor(df$int_rate,df$dti) # 7.7%
 
 # new feature: declared_dti (combining dti and dti_joint) --> declared_dti brings benefit, correlation increase from 7.7% to 16.4%.
