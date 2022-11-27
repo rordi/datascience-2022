@@ -32,6 +32,8 @@ install.packages("randomForest")
 install.packages("Metrics")
 install.packages("caret")
 install.packages('gbm')
+install.packages('gbm')
+install.packages('Cubist')
 
 # load packages
 library("corrplot")
@@ -50,6 +52,7 @@ library("Metrics")
 library("rpart")
 library("caret")
 library('gbm')
+library("Cubist")
 # unzip raw data
 unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
@@ -140,7 +143,6 @@ df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 yea
 df$emp_length<-as.numeric(df$emp_length)
 df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
 cor(df$emp_length,df$int_rate)
-
 df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_length<=5,1,2))
 #!!!!irrelevant we can leave it out: 0.6% correlation
 
@@ -313,6 +315,14 @@ NLP_df$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scienti
 cor(df$int_rate,NLP_df$Good_employment)
 df$Good_employment<-NLP_df$Good_employment
 
+#Good_States
+
+df$Good_States<-ifelse(df$addr_state=="MA"|df$addr_state=="CA"|df$addr_state=="IL"|df$addr_state=="NH"|df$addr_state=="WI"|df$addr_state=="CO"|df$addr_state=="DC"|df$addr_state=="TX"|df$addr_state=="NJ"|df$addr_state=="CT"|df$addr_state=="AZ"|df$addr_state=="ME"|df$addr_state=="MT"|df$addr_state=="OR"|df$addr_state=="RI"|df$addr_state=="ID"|df$addr_state=="ND"|df$addr_state=="NE"|df$addr_state=="IA"|df$addr_state=="MO"|df$addr_state=="KS",1,0)
+cor(df$int_rate,df$Good_States)
+
+#Good_employment
+
+
 #(!) still possible to investigate how other variables can be combined to produce better predictors
 
 # a closer look at the annual income
@@ -333,8 +343,10 @@ skim(df)
 
 #train split (choose the number of raw by changing the percentage in the row_train)
 
-variables_for_prediction<-df[,c("Class_Income","emp_length2","total_acc","revol_bal","tot_cur_bal","purpose_car","Good_employment","inq_last_6mths","revol_util","Loan_to_Wealth_index","verification_status_Not Verified","declared_dti","Has_something_wrong_done","purpose_credit_card","purpose_debt_consolidation","purpose_house","purpose_medical","purpose_moving","purpose_other",
-                        "purpose_small_business","int_rate")]
+
+variables_for_prediction<-df[,c("loan_amnt","home_ownership_RENT","home_ownership_MORTGAGE","Good_States","Class_Income","emp_length2","total_acc","revol_bal","tot_cur_bal","purpose_car","Good_employment","inq_last_6mths","revol_util","Loan_to_Wealth_index","verification_status","declared_dti","Has_something_wrong_done","purpose_credit_card","purpose_debt_consolidation","purpose_house","purpose_medical","purpose_moving","purpose_other",
+                                "purpose_small_business","int_rate")]
+
 nrow_train<-round(nrow(variables_for_prediction)*0.75,0)
 Train_data<-variables_for_prediction[0:nrow_train,]
 Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction),]
@@ -346,27 +358,34 @@ Linear_regression<- lm(int_rate~.,data=Train_data)
 Linear_regression_prediction<-predict(Linear_regression,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,Linear_regression_prediction)))
 summary(Linear_regression)
-vif(Base_model)
+vif(Linear_regression)
 
-#Regression tree
+# Regression tree 
 
 Regression_tree <- rpart(int_rate ~., data=Train_data, control=rpart.control(cp=.0001))
 Regression_tree_prediction<-predict(Regression_tree,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,Regression_tree_prediction)))
 
+# Tree of regression models (like M5P weka)
+
+Tree_of_regression_models <- cubist(x=Train_data[,-25],y=Train_data$int_rate)
+Tree_of_regression_models_prediction<-predict(Tree_of_regression_models,Test_data)
+print(paste0('MAE: ' , mae(Test_data$int_rate,Tree_of_regression_models_prediction)))
+
 # Random Forest
 
-random_forest <- randomForest(int_rate~., data=Train_data, maxnodes = 100, mtry=10, ntree = 200 )
+random_forest <- randomForest(int_rate~., data=Train_data, maxnodes = NULL, mtry=7, ntree = 200 )
 random_forest_prediction<-predict(random_forest,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,random_forest_prediction)))
 
 #AdaBoost
+
 model_adaboost <- gbm(int_rate ~.,data = Train_data,
                                 distribution = "gaussian",
                                 cv.folds = 10,
                                 shrinkage = .01,
-                                n.minobsinnode = 10,
-                                n.trees = 500)
+                                n.minobsinnode = 12,
+                                n.trees = 100)
 model_adaboost_prediction<-predict(model_adaboost ,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,model_adaboost_prediction)))
 
