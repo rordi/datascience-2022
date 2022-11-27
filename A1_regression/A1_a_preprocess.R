@@ -68,8 +68,8 @@ library('gbm')
 # unzip("./A1_regression/LCdata.csv.zip", exdir = "./A1_regression")
 
 # load raw data from csv into data frame
-df <- fread("./A1_regression/LCdata.csv", sep=";")
-
+df_raw <- fread("./A1_regression/LCdata.csv", sep=";")
+df<-df_raw
 
 # =====================================================================
 # PURGE IRRELEVANT ATTRIBUTES
@@ -141,12 +141,6 @@ skim(df)
 # we need to filter for numeric variables to use corrplot and also handle NAs
 # corrplot(df)
 
-# we take a closer look at the int_rate, which is our target variable!
-# @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
-summary(df$int_rate)
-hist(df$int_rate, main="Interest Rates")
-boxplot(df$int_rate, main="Interest Rates", ylab="Percent")
-
 # Initial observations:
 #
 # --> after initial drop of variables, we have 49 variables left and ~798K observations
@@ -199,7 +193,7 @@ describe_feature <- function(feature, feature_name = "Feature") {
   # what is the correlation of the feature with our target variable?
   message(paste("Correlation with target variable: ", cor(feature_handled,df$int_rate)))
   
-  # outliers detection
+  # outliers detection (exclude null values as we have some very sparse attributes)
   outliers<-boxplot.stats(feature_handled)$out
   outliers_count<-length(outliers)
   message(paste("Potential outliers (1.5 * IQR): ", outliers_count))
@@ -238,6 +232,18 @@ handle_zip <- function(feature, divide_by = 1) {
 apply_threshold <- function(feature, threshold = 1) {
   feature_handled<-ifelse(feature>threshold, threshold, feature)
 }
+
+
+# Target variable check
+# --------------------------------------------------------------------
+
+# we take a closer look at the int_rate, which is our target variable!
+# @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
+describe_feature(df$int_rate, "Interest Rate (%)")     # some outliers in the range 25.57 - 28.99
+df_outliers<-subset(df, df$int_rate >= 25.57)
+skim(df_outliers)
+
+
 
 # Features that are possibly dependent on each other
 # --------------------------------------------------------------------
