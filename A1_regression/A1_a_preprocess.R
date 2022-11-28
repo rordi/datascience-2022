@@ -189,7 +189,7 @@ which(is.na(df$pub_rec))
 which(is.na(df$total_acc))
 which(is.na(df$acc_now_delinq))
 
-# drop those 25 empty rows from the dataframe
+# drop those 25 empty rows from the df
 df<-df[-which(is.na(df$delinq_2yrs))]
 
 
@@ -201,7 +201,7 @@ df<-df[-which(is.na(df$delinq_2yrs))]
 # select the functions and run them once to define them in the env. Then you can also use them on the command line !
 
 #**
-#* function that describes a feature 
+#* function that describes a (numeric) feature 
 #* usage example: describe_feature(df$int_rate, "Interest Rate")
 #* 
 describe_feature <- function(feature, feature_name = "Feature") {
@@ -237,7 +237,7 @@ describe_feature <- function(feature, feature_name = "Feature") {
 }
 
 #**
-#* function to replace na with 0
+#* function to replace NAs with 0 or another value that we can pass as argument (e.g. a mean or median)
 #*
 handle_na <- function(feature, replace_with = 0) {
   feature_handled<-replace_na(feature, replace_with)
@@ -245,20 +245,21 @@ handle_na <- function(feature, replace_with = 0) {
 }
 
 #**
-#* function to convert zip codes to numeric
-#* 
-handle_zip <- function(feature, divide_by = 1) {
-  feature_handled<-sub("xx", "", feature)
-  feature_handled<-as.numeric(feature_handled)
-  feature_handled<-round(feature_handled/divide_by, digits = 0)   # reducing to 1 or 2 digits does not improve the attribute
-  return(feature_handled)
-}
-
-#**
-#* function to apply a threshold value to outliers
+#* function to apply a (maximum) threshold value to outliers
+#* e.g., we can cut-off the annual income distribution at threshold = 150'000 USD - any value above will be replaced with 150'000 USD
 #* 
 apply_threshold <- function(feature, threshold = 1) {
   feature_handled<-ifelse(feature>threshold, threshold, feature)
+}
+
+#**
+#* function to convert zip codes to numeric
+#* 
+handle_zip <- function(feature, divide_by = 1) {
+  feature_handled<-sub("xx", "", feature) # replace "xx" in zip codes (e.g. "123xx")
+  feature_handled<-as.numeric(feature_handled)
+  feature_handled<-round(feature_handled/divide_by, digits = 0)   # we found that reducing to 1 or 2 digits does not improve the attribute
+  return(feature_handled)
 }
 
 
@@ -280,6 +281,12 @@ apply_threshold <- function(feature, threshold = 1) {
 describe_feature(df$int_rate, "Interest Rate (%)")     # some outliers in the range 25.57 - 28.99
 df_outliers<-subset(df, df$int_rate >= 25.57)
 skim(df_outliers)
+
+# @TODO - we need to check if the interest rate is statistically significantly different between single and joint applications !!
+# ...
+# ...
+# ...
+# ...
 
 
 
@@ -368,6 +375,11 @@ z[order(-abs(z$value)),] # sort
 #          home_ownership_MORTGAGE -0.06152897
 #              home_ownership_RENT  0.06176908
 
+# copy home ownership RENT and MORTGAGE dummies to main df
+df$home_ownership_RENT<-df_dummies$home_ownership_RENT
+describe_feature(df$home_ownership_RENT, "Home (Rent)")
+df$home_ownership_MORTGAGE<-df_dummies$home_ownership_MORTGAGE
+describe_feature(df$home_ownership_MORTGAGE, "Home (Mortgage)")
 
 # emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
 df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",10,df$emp_length)))))))))))
