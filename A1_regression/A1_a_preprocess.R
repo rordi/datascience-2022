@@ -339,15 +339,10 @@ df = subset(df, select = -c(
 # --------------------------------------------------------------------
 
 # create separate df with dummy variables for some of the string attributes
-df_dummies<-dummy_cols(df,
-               select_columns = c(
-                 "verification_status",
-                 "purpose",
-                 "home_ownership",
-                 "addr_state"
-                 ),
-               remove_first_dummy = FALSE
-               )
+df_dummies<-df
+numcol<-ncol(df_dummies)
+df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status", "purpose","home_ownership","addr_state"))
+df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
 
 # remove the columns from df (we will add back dummies selectively for those that are interesting)
 df = subset(df, select = -c(
