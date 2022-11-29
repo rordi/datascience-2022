@@ -19,27 +19,27 @@
 # clear envionrment
 rm(list=ls())
 
-# set memory limit: this works only on Windows (you can copy-paste the below commented-out command into console and run it there)
-# memory.limit(700000)
-
 # allow for reproducible results
 set.seed(1)
 
+# set memory limit: this works only on Windows (you can copy-paste the below commented-out command into console and run it there)
+# memory.limit(700000)
+
 # install package dependencies
-install.packages("corrplot")
-install.packages("dplyr")
-install.packages("scales")
-install.packages("data.table")
-install.packages("skimr")
-install.packages("fastDummies")
-install.packages("car")
-install.packages("tm")
-install.packages("SnowballC")
-install.packages("randomForest")
-install.packages("reshape")
-install.packages("Metrics")
-install.packages("caret")
-install.packages('gbm')
+#install.packages("corrplot")
+#install.packages("dplyr")
+#install.packages("scales")
+#install.packages("data.table")
+#install.packages("skimr")
+#install.packages("fastDummies")
+#install.packages("car")
+#install.packages("tm")
+#install.packages("SnowballC")
+#install.packages("randomForest")
+#install.packages("reshape")
+#install.packages("Metrics")
+#install.packages("caret")
+#install.packages('gbm')
 
 # load packages
 library("corrplot")
@@ -116,7 +116,7 @@ df = subset(df, select = -c(
 #))
 
 # dump csv with attributes dropped into CSSV for e.g., further analysis in Tableau Prep
-write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
+# write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
 
 
@@ -191,6 +191,7 @@ which(is.na(df$acc_now_delinq))
 
 # drop those 25 empty rows from the df
 df<-df[-which(is.na(df$delinq_2yrs))]
+df_raw<-df_raw[-which(is.na(df_raw$delinq_2yrs))] # make df_raw same length as df so that we can easily re-copy an attribute to df later on if we make mistakes
 
 
 
@@ -240,7 +241,7 @@ describe_feature <- function(feature, feature_name = "Feature") {
 #* function to replace NAs with 0 or another value that we can pass as argument (e.g. a mean or median)
 #*
 handle_na <- function(feature, replace_with = 0) {
-  feature_handled<-replace_na(feature, replace_with)
+  feature_handled<-replace_na(as.numeric(feature), replace_with)
   return(feature_handled)
 }
 
@@ -262,7 +263,58 @@ handle_zip <- function(feature, divide_by = 1) {
   return(feature_handled)
 }
 
+#**
+#* function to handle states data; this is based on findings from dummy encoding
+#* using the states with negative corr. coeff. ("good states") improved the result
+#* 
+handle_states<-function(df) {
+  return(
+    ifelse(
+      df$addr_state=="MA" | 
+        df$addr_state=="CA" |
+        df$addr_state=="MA" | 
+        df$addr_state=="CA" | 
+        df$addr_state=="IL" | 
+        df$addr_state=="NH" | 
+        df$addr_state=="WI" | 
+        df$addr_state=="CO" | 
+        df$addr_state=="DC" | 
+        df$addr_state=="TX" | 
+        df$addr_state=="NJ" | 
+        df$addr_state=="CT" | 
+        df$addr_state=="AZ" | 
+        df$addr_state=="ME" | 
+        df$addr_state=="MN" | 
+        df$addr_state=="MT" | 
+        df$addr_state=="VT" | 
+        df$addr_state=="OR" | 
+        df$addr_state=="RI" | 
+        df$addr_state=="ID" | 
+        df$addr_state=="ND" | 
+        df$addr_state=="NE" | 
+        df$addr_state=="IA" | 
+        df$addr_state=="MO"
+      , 1, 0)
+  ) 
+}
 
+#**
+#* function to handle states data; this is based on findings from dummy encoding
+#* using the states with negative corr. coeff. ("good states") improved the result
+#* 
+handle_empt_length<-function(feature) {
+  return(ifelse(feature=="< 1 year", 0.5,
+                ifelse(feature=="1 year", 1,
+                       ifelse(feature=="2 years", 2,
+                              ifelse(feature=="3 years", 3,
+                                     ifelse(feature=="4 years", 4,
+                                            ifelse(feature=="5 years", 5,
+                                                   ifelse(feature=="6 years", 6,
+                                                          ifelse(feature=="7 years", 7,
+                                                                 ifelse(feature=="8 years", 8,
+                                                                        ifelse(feature=="9 years", 9,
+                                                                               ifelse(feature=="10+ years", 10, NA))))))))))))
+}
 
 # =====================================================================
 # FEATURE SELECTION OF EXISTING FEATURES
@@ -270,7 +322,6 @@ handle_zip <- function(feature, divide_by = 1) {
 
 # In a next step we define our own function "describe_feature" and run it on every numerical attribute. The results are 
 # recorded in a Google Sheet for better overview: https://docs.google.com/spreadsheets/d/1d9JnSfMhEuIjDAsVg6EK4g-UefP_-IXGu-S9b9Y1gbY
-
 
 
 # Target variable check
@@ -344,18 +395,10 @@ numcol<-ncol(df_dummies)
 df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status", "purpose","home_ownership","addr_state"))
 df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
 
-# remove the columns from df (we will add back dummies selectively for those that are interesting)
-df = subset(df, select = -c(
-  verification_status,
-  purpose,
-  home_ownership,
-  addr_state
-))
-
 # compute the correlations with target variable for all dummy variable and keep only those with corr coeff < -0.05 or > 0.05
 z<-cor(df$int_rate,df_dummies)
 z[z == 1] <- NA #drop perfect
-z[abs(z) < 0.05] <- NA # drop less than abs(0.5)
+z[abs(z) < 0.01] <- NA # drop less than abs(0.01)
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
 
@@ -375,17 +418,32 @@ df$home_ownership_RENT<-df_dummies$home_ownership_RENT
 describe_feature(df$home_ownership_RENT, "Home (Rent)")
 df$home_ownership_MORTGAGE<-df_dummies$home_ownership_MORTGAGE
 describe_feature(df$home_ownership_MORTGAGE, "Home (Mortgage)")
+df = subset(df, select = -c(
+  home_ownership
+))
 
 # emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
-df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",10,df$emp_length)))))))))))
-df$emp_length<-as.numeric(df$emp_length)
-describe_feature(df$emp_length, "Employment Length")
-df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE) # replace NAs with mean
-describe_feature(df$emp_length, "Employment Length (mean applied") # improves the correlation
+df$emp_length<-handle_empt_length(df$emp_length)
+df$emp_length_numeric<-as.numeric(df$emp_length)
+describe_feature(df$emp_length_numeric, "Employment Length")
 
-df$emp_length2<- ifelse(df$emp_length<=2,0,ifelse(df$emp_length>2 & df$emp_length<=5,1,2))
-#!!!!irrelevant we can leave it out: 0.6% correlation
+# apply the median to the NAs in
+df$emp_length_median<-df$emp_length_numeric
+df$emp_length_median[is.na(df$emp_length_median)]<-median(df$emp_length_median,na.rm=TRUE) # replace NAs with median
+describe_feature(df$emp_length_median, "Employment Length (median applied") # improves the correlation
 
+df = subset(df, select = -c(
+  emp_length,
+  emp_length_numeric
+))
+
+# create a separate feature "good states" for the states that have neg. correlation
+# coeff with the target variable (this worked better as group rather than individually)
+df$Good_States<-handle_states(df)
+describe_feature(df$Good_States, "Good States")
+df = subset(df, select = -c(
+  addr_state
+))
 
 
 # annual_inc
@@ -400,11 +458,12 @@ describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.112 correlat
 # dti
 describe_feature(df$dti) # has outliers, threshold at 99.9% percentile (39.73) seems good
 df$dti<-apply_threshold(df$dti, threshold = 39.73) # produces nice bell.shaped curve --> replace NA with median
-df$dti = handle_na(df$dti_joint)
+df$dti = handle_na(df$dti)
 
+# dti_joint
 df$dti_joint = handle_na(df$dti_joint)
-<-replace_na(df$dti_joint,0)
 cor(df$int_rate,df$dti) # 7.7%
+
 
 # new feature: declared_dti (combining dti and dti_joint) --> declared_dti brings benefit, correlation increase from 7.7% to 16.4%.
 df$declared_dti<-ifelse(df$dti_joint==0,df$dti,df$dti_joint)
@@ -483,21 +542,22 @@ cor(df$int_rate,df$total_acc)
 df$mths_since_last_major_derog<-replace_na(df$mths_since_last_major_derog,0)
 cor(df$int_rate,df$mths_since_last_major_derog)
 
-#All the open_il_"" (too many missing values and no replacement is useful to increase the correlation  the open_il because they are irrelevant)
-df$open_il_24m<-replace_na(df$open_il_24m,0)
-cor(df$int_rate,df$open_il_24m)
 #total_bal_il (irrelevant)
 df$total_bal_il<-replace_na(df$total_bal_il,0)
 cor(df$int_rate,df$total_bal_il)
+
 #all_util (irrelaevant)
 df$all_util<-replace_na(df$all_util,0)
 cor(df$int_rate,df$all_util)
-#emp_lenght (irrelevant)
-df$emp_length<-ifelse(df$emp_length=="< 1 year",0.5,ifelse(df$emp_length=="1 year",1,ifelse(df$emp_length=="2 years",2,ifelse(df$emp_length=="3 years",3,ifelse(df$emp_length=="4 years",4,ifelse(df$emp_length=="5 years",5,ifelse(df$emp_length=="6 years",6,ifelse(df$emp_length=="7 years",7,ifelse(df$emp_length=="8 years",8,ifelse(df$emp_length=="9 years",9,ifelse(df$emp_length=="10+ years",15,df$emp_length)))))))))))
-df$emp_length<-as.numeric(df$emp_length)
-df$emp_length[is.na(df$emp_length)]<-mean(df$emp_length,na.rm=TRUE)
-df$emp_length2<-ifelse(df$emp_length<5,0,1)
-cor(df$emp_length2,df$int_rate)
+
+# open_rv_12m, open_rv_24m --> drop, both are weak and sparse and interdependent
+describe_feature(df$open_rv_12m)
+describe_feature(df$open_rv_24m)
+cor(handle_na(df$open_rv_12m), handle_na(df$open_rv_24m))   # correlation: 0.87
+df = subset(df, select = -c(
+  open_rv_12m,
+  open_rv_24m
+))
 
 #acc_now_delinq
 df$acc_now_delinq<-replace_na(df$acc_now_delinq,0)
