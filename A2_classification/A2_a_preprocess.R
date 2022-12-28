@@ -59,8 +59,9 @@
 
 #TARGET STATUS
 #TARGET = status 
-#The last attribute status contains the “pay-back behavior”, i.e. when did that customer pay back their depts:
-#Please note: We are learning only the pay-back behavior. The decision, i.e. if we accept a customer or not, is done in another process step – not here!
+#The last attribute status contains the “pay-back behavior”, i.e. when did that customer 
+#pay back their depts: Please note: We are learning only the pay-back behavior. 
+#The decision, i.e. if we accept a customer or not, is done in another process step – not here!
 
 # 0: 1-29 days past due
 # 1: 30-59 days past due
@@ -71,6 +72,7 @@
 # C: paid off that month
 # X: No loan for the month
 
+#Observation: 77% of the samples are having status 0
 
 #convert non-numerical attributes to numeric. Hint from Holger: All in- and output values need to be floating numbers 
 #(or integers in exceptions) in the range of [0,1] 
@@ -97,10 +99,16 @@
 #The validation score for the model used would then be the average of the K validation scores obtained.
 #from trianing example. obviously must be updated
 
+install.packages("tensorflow")
+library(tensorflow)
+install_tensorflow()
+library(tensorflow)
+tf$constant("Hellow Tensorflow")
 # allow for reproducible results
 set.seed(1)
 
 install.packages("keras")
+install.packages("caret")
 install.packages("readr")
 install.packages("dplyr")
 install.packages("Sequential")
@@ -110,6 +118,9 @@ install.packages("data.table")
 install.packages("tidyr")
 install.packages("reticulate")
 library(keras)
+library(ggplot2)
+library(lattice)
+library(caret)
 library(readr)
 library(Sequential)
 library(dplyr)
@@ -119,42 +130,43 @@ library(data.table)
 library(tidyr)
 library(reticulate)
 
+setwd("~/Documents/FHNW/Data Science/Assignment/datascience-2022/A2_classification")
 rm(list=ls())
 df<- fread("Dataset-part-2.csv", sep = ",", header = TRUE)
-df1<-df
+df1<-df #don't really understand this step. but seems to have no influence on the dummies. 
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "NA")
 
-head(df1)
-glimpse(df1)
+#head(df)
+#glimpse(df)
+View(df1)
 View(df)
-
 #add in code the names of the columns 
 #create dummy variables and one-hot encode them
 df <- dummy_cols(df, select_columns = c("CODE_GENDER","FLAG_OWN_CAR","FLAG_OWN_REALTY",
                                         "NAME_INCOME_TYPE","NAME_EDUCATION_TYPE",
                                         "NAME_FAMILY_STATUS","NAME_HOUSING_TYPE",
-                                        "FLAG_WORK_PHONE","FLAG_PHONE","FLAG_EMAIL","OCCUPATION_TYPE"), 
+                                        "FLAG_WORK_PHONE","FLAG_PHONE","FLAG_EMAIL","OCCUPATION_TYPE","status"), 
                  remove_selected_columns = TRUE)
 
 View(df)
 
-#create target dummies with column status, one-hot encode them into eight columns
-status <-df$status
-df_target <- data.frame(status)
-View(df_target)
-df_target_dummies<-df_target
-numcol<-ncol(df_target_dummies)
-df_target_dummies<-dummy_cols(df_target_dummies, select_columns = c("status"))
-View(df_target_dummies)
+#retired / recoded. create target dummies with column status, one-hot encode them into eight columns
+#status <-df$status
+#df_target <- data.frame(status)
+#View(df_target)
+#df_target_dummies<-df_target
+#numcol<-ncol(df_target_dummies)
+#df_target_dummies<-dummy_cols(df_target_dummies, select_columns = c("status"))
+#View(df_target_dummies)
 
 #remove status from df data frame, since it is stored now as dummies in d_target_dummies
-df_subset <- subset(df, select = -status)
-View(df_subset)
-head(df_subset)
-glimpse(df_subset)
-#change name back to df 
-df <- df_subset
-View(df)
+#df_subset <- subset(df, select = -status)
+#View(df_subset)
+#head(df_subset)
+#glimpse(df_subset)
+#change name to df1
+#df <- df_subset
+#View(df)
 
 #copy / paste from Marco: 
 #Function range that is applicable to columns with either all positive or negative values
@@ -189,28 +201,45 @@ df<-df[,-"FLAG_MOBIL"]
 #drop CNT_CHILDREN cause is redundant with CNT_FAM_MEMBERS, correlation: 0.87
 
 df<-df[,-"CNT_CHILDREN"]
-
-#disregard below mess, not handled in this script yet. old notes. . 
-#Add the target to the dataset
-
-#?df$status<-df1$status
-
-summary(df)
-
-
-#????CONVERT TO MATRIX
-data.matrix(df, rownames.force = NA)
 View(df)
-#train... 
+colnames(df) #"status" 
 
-#compute scores
-all_scores
 
-#compute mean of all scores
-mean(all_scores)
+# transform your data frame into a matrix or array
+data_matrix <- as.matrix(df)
+dim(data_matrix)
+colnames(data_matrix)
+# Define your model and compile it
+model <- keras_model_sequential()
+model %>% 
+  layer_dense(units = 65, activation = "relu", input_shape = ncol(data_matrix)) %>%
+  layer_dense(units = 65, activation = "relu") %>%
+  layer_dense(units = 8, activation = "softmax")
+model %>% compile(
+    loss = "categorical_crossentropy",
+    optimizer = "adam",
+    metrics = c("accuracy")
+  )
 
-#comment on difference of individual scores vs average
-#
+# Use the `k_fold_cv()` function to specify the number of folds and the target labels for your data
+results <- k_fold_cv(
+  model, 
+  data_matrix, 
+  num_folds = 5, 
+  epochs = 10, 
+  batch_size = 32, 
+  labels = data_matrix[,c(59,60,61,62,63,64,65,66)],  # The target labels for your data
+  verbose = 1
+)
+
+# You can access the results of the cross-validation using the `results` object
+print(results)
+
+
+
+
+
+
 
 #try training the network for a bit longer: 500 epochs. To keep a record of how well the model did at each epoch, 
 #we will modify our training loop to save the per-epoch validation score log
@@ -219,8 +248,55 @@ mean(all_scores)
 k_clear_session()
 
 
+# Define the model architecture
+model <- keras_model_sequential() %>%
+  layer_dense(units = 58, input_shape = c(N), activation = "relu") %>%
+  layer_dense(units = 8, activation = "softmax")
 
-#compute the average of the per-epoch MAE scores for all folds
+# Compile the model
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = "adam",
+  metrics = c("accuracy")
+)
+
+# Define the k-fold cross-validation scheme
+k <- 10
+kfold <- createFold(y, k = k, list = TRUE, returnTrain = TRUE)
+
+# Initialize a list to store the evaluation scores
+scores <- list()
+
+# Loop through each fold
+for (i in 1:k) {
+  # Split the data into train and test sets
+  train_idx <- kfold[[i]]
+  test_idx <- setdiff(1:length(y), train_idx)
+  x_train <- x[train_idx, ]
+  y_train <- y[train_idx]
+  x_test <- x[test_idx, ]
+  y_test <- y[test_idx]
+  
+# Train the model on the train set
+model %>% fit(
+    x_train, y_train,
+    epochs = 10,
+    batch_size = 32
+  )
+  
+# Evaluate the model on the test set
+score <- model %>% evaluate(x_test, y_test, verbose = 0)
+  
+# Store the evaluation score
+scores[[i]] <- score
+}
+
+# Compute the mean and standard deviation of the evaluation scores
+mean_score <- mean(sapply(scores, "[[", "accuracy"))
+sd_score <- sd(sapply(scores, "[[", "accuracy"))
+
+
+#from holger: compute the average of the per-epoch MAE scores for all folds
 average_mae_history <- data.frame(
   epoch = seq(1:ncol(all_mae_histories)),
   validation_mae = apply(all_mae_histories, 2, mean)
