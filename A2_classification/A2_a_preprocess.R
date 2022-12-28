@@ -105,10 +105,10 @@ install_tensorflow()
 library(tensorflow)
 tf$constant("Hellow Tensorflow")
 # allow for reproducible results
-set.seed(1)
 
 install.packages("keras")
 install.packages("caret")
+
 install.packages("readr")
 install.packages("dplyr")
 install.packages("Sequential")
@@ -121,6 +121,7 @@ library(keras)
 library(ggplot2)
 library(lattice)
 library(caret)
+
 library(readr)
 library(Sequential)
 library(dplyr)
@@ -209,29 +210,62 @@ colnames(df) #"status"
 data_matrix <- as.matrix(df)
 dim(data_matrix)
 colnames(data_matrix)
-# Define your model and compile it
-model <- keras_model_sequential()
-model %>% 
-  layer_dense(units = 65, activation = "relu", input_shape = ncol(data_matrix)) %>%
-  layer_dense(units = 65, activation = "relu") %>%
-  layer_dense(units = 8, activation = "softmax")
-model %>% compile(
-    loss = "categorical_crossentropy",
-    optimizer = "adam",
-    metrics = c("accuracy")
-  )
 
-# Use the `k_fold_cv()` function to specify the number of folds and the target labels for your data
-results <- k_fold_cv(
-  model, 
-  data_matrix, 
-  num_folds = 5, 
-  epochs = 10, 
-  batch_size = 32, 
-  labels = data_matrix[,c(59,60,61,62,63,64,65,66)],  # The target labels for your data
-  verbose = 1
+x <- data_matrix[, c(2:57)] # features
+y <- data_matrix[, c(58:65)] # target values
+
+# architecture
+model <- keras_model_sequential()
+
+model %>%
+  layer_dense(units = 8, activation = "relu", input_shape = ncol(x)) %>%
+  layer_dense(units = 8, activation = "softmax")
+
+# compile
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = "adam",
+  metrics = c("accuracy")
 )
 
+# train with k-fold
+k <- 10
+
+set.seed(123)
+
+folds <- createFolds(y, k = k)
+i <- 1
+for (i in 1:k) {
+val_idx <- folds[[i]]
+train_idx <- unlist(folds[-i])
+  
+  # Use train_idx to select the rows of the data matrix for training
+x_fold_train <- x
+y_fold_train <- y
+  
+  # Use val_idx to select the rows of the data matrix for validation
+x_fold_val <- x
+y_fold_val <- y
+  
+# Train the model on the current fold
+model %>% fit(
+  x = x_fold_train, y = y_fold_train,
+  epochs = 10,
+  batch_size = 32,
+  validation_data = list(x_fold_val, y_fold_val),
+  verbose = 0
+)
+
+# Evaluate the model on the current fold
+fold_history <- model %>% evaluate(
+  x_fold_val, y_fold_val,
+  verbose = 0
+)
+
+# Save the training history for the current fold
+history[[i]] <- fold_history
+}
+    
 # You can access the results of the cross-validation using the `results` object
 print(results)
 
@@ -241,8 +275,7 @@ print(results)
 
 
 
-#try training the network for a bit longer: 500 epochs. To keep a record of how well the model did at each epoch, 
-#we will modify our training loop to save the per-epoch validation score log
+#....
 
 # Some memory clean-up
 k_clear_session()
