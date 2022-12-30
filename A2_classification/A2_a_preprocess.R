@@ -5,30 +5,29 @@
 # Group A2
 # Dietrich Rordorf, Marco Lecci, Sarah Castratori
 #
-# This script is used to preprocess the raw data from CSV to useable
+# This script is used to preprocess the raw data from CSV to usable
 # state.
 #
 # =====================================================================
-#HINTS FROM ASSIGNMENT PAPER / HOLGER
-    #• Data preprocessing is easier here; no feature engineering is needed.
-    #• You may be able to reuse parts of the exercises we used in our examples during lectures.
-    #• All in- and output values need to be floating numbers (or integers in exceptions) in the range of [0,1].
-    #• Please note that a neural network expects a R matrix or vector, not data frames. Transform your
-    #data (e.g. a data frame) into a matrix with data.matrix if needed.
-    #• There are some models which show an accuracy higher than 90% (!) for training (and test) data –
-    #after learning more than 1000 epochs.
+# HINTS FROM ASSIGNMENT PAPER / HOLGER
+    # • Data preprocessing is easier here; no feature engineering is needed.
+    # • You may be able to reuse parts of the exercises we used in our examples during lectures.
+    # • All in- and output values need to be floating numbers (or integers in exceptions) in the range of [0,1].
+    # • Please note that a neural network expects a R matrix or vector, not data frames. Transform your
+    #   data (e.g. a data frame) into a matrix with data.matrix if needed.
+    # • There are some models which show an accuracy higher than 90% (!) for training (and test) data –
+    #   after learning more than 1000 epochs.
 
-#MAIN TASK FROM ASSIGNMENT PAPER/ HOLGER
-  #• Design your network. Why did you use a feed-forward network, or a convolutional or recursive network – and why not?
-  #• Use k-fold validation (with k = 10) to find the best hyperparameters for your network.
-  #• Use the average of the accuracy to evaluate the performance of your trained network.
-  #• Find a “reasonable” good model. Argue why that model is reasonable. If you are not able to find a reasonable good model, explain what you all did to find a good model and argue why you think that’s not a good model.
-  #• Save your trained neural network with save_model_hdf5. Also save your data sets you used for training, testing and validation.
+# MAIN TASK FROM ASSIGNMENT PAPER/ HOLGER
+  # • Design your network. Why did you use a feed-forward network, or a convolutional or recursive network – and why not?
+  # • Use k-fold validation (with k = 10) to find the best hyperparameters for your network.
+  # • Use the average of the accuracy to evaluate the performance of your trained network.
+  # • Find a “reasonable” good model. Argue why that model is reasonable. If you are not able to find a reasonable good model, explain what you all did to find a good model and argue why you think that’s not a good model.
+  # • Save your trained neural network with save_model_hdf5. Also save your data sets you used for training, testing and validation.
 
 
 #ATTRIBUTE OVERVIEW 
   #Attribute Name Explanation Remarks
-
   #ID                   Client number
   #CODE_GENDER          Gender
   #FLAG_OWN_CAR         Is there a car
@@ -99,263 +98,332 @@
 #The validation score for the model used would then be the average of the K validation scores obtained.
 #from trianing example. obviously must be updated
 
-install.packages("tensorflow")
-library(tensorflow)
-install_tensorflow()
-library(tensorflow)
-tf$constant("Hellow Tensorflow")
+
+
+# =====================================================================
+# PRELIMINARIES
+# =====================================================================
+
+# clear envionrment
+rm(list=ls())
+
 # allow for reproducible results
+set.seed(1)
 
-install.packages("keras")
+# set memory limit: this works only on Windows (you can copy-paste the below commented-out command into console and run it there)
+# memory.limit(700000)
+
+
+# Apple M1 & M2 users --> please install according to https://gist.github.com/rordi/9970c8840614644e01a53d68e51f37fd
+#
+# Other users (Windows, older Intel-based Macs), please copy-paste the following commands to the RStudio console manually:
+# 
+# install.packages("tensorflow")
+# library(reticulate)
+# library(tensorflow)
+# install_tensorflow()
+# install.packages("keras")
+# library(keras)
+# install_keras()
+
+
+# --> This r-reticulate Keras call installs tensorflow-metal again, which I have to remove manually again!! It is not compatible with Apple's GPU chips.
+# --> open terminal (iterm)
+# --> check the python / conda envs availalbe:
+#       conda info --envs
+# --> activate the conda env for r-reticulate, for me this was:
+#       source /Users/didi/Library/r-miniconda-arm64/bin/activate
+# --> then still in iterm uninstall the tensorflow-metal again (be sure to use the same coda env python distro):
+#       /Users/didi/Library/r-miniconda-arm64/envs/r-reticulate/bin/python -m pip uninstall tensorflow-metal
+
+# confirm installation 
+library(tensorflow)
+tf$constant("Hello Tensorflow!")
+
+
+# install other package dependencies
+install.packages("Sequential")
 install.packages("caret")
-
 install.packages("readr")
 install.packages("dplyr")
-install.packages("Sequential")
 install.packages("fastDummies")
 install.packages("corrplot")
 install.packages("data.table")
 install.packages("tidyr")
-install.packages("reticulate")
-library(keras)
+install.packages("ROSE")
+
+
+library(Sequential)
 library(ggplot2)
 library(lattice)
 library(caret)
-
 library(readr)
-library(Sequential)
 library(dplyr)
 library(fastDummies)
 library(corrplot)
 library(data.table)
 library(tidyr)
-library(reticulate)
+library(ROSE)
 
-setwd("~/Documents/FHNW/Data Science/Assignment/datascience-2022/A2_classification")
-rm(list=ls())
-df<- fread("Dataset-part-2.csv", sep = ",", header = TRUE)
-df1<-df #don't really understand this step. but seems to have no influence on the dummies. 
+
+df<- fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
+
+
+# =====================================================================
+# INITIAL OBSERVATIONS
+# =====================================================================
+
+# print basic description of data frame
+dim(df)    # we have 19 variables and ~67.6K observations (really few observations for training a NN! -> we should use cross-validation with 10% test splits)
+str(df)
+glimpse(df)
+View(df)
+
+# Initial Observations:
+# 
+# --> OCCUPATION_TYPE: has "NA" coded as a string
+# --> NAME_EDUCATION_TYPE: categorical, seems to have some sort of hierarchy encoded such as in "Secondary / secondary special"
+# --> status: variable name has different spelling and the status are numbers encoded as strings; this is our targt feature
+# --> several variables are categorical and need one-hot encoding:
+#    - CODE_GENDER
+#    - FLAG_OWN_CAR
+#    - FLAG_OWN_REALTY
+#    - NAME_INCOME_TYPE
+#    - NAME_EDUCATION_TYPE
+#    - NAME_FAMILY_STATUS
+#    - NAME_HOUSING_TYPE
+# --> several feature seem to be already one-hot encoded (to be checked if they really only contain 0 and 1s) but seem to indicate if the person has a type of contact yes/no (are they all really useful features?):
+#    - FLAG_MOBIL
+#    - FLAG_WORK_PHONE
+#    - FLAG_PHONE
+#    - FLAG_EMAIL
+# --> DAYS_EMPLOYED: can be positive (employed) or negative (likely days since last employment, this could thus be unemployed or retired persons)
+
+
+# =====================================================================
+# HELPER FUNCTIONS TO DESCRIBE AND PREPROCESS FEATURES
+# =====================================================================
+
+#**
+#* function that describes a (numeric) feature 
+#* usage example: describe_feature(df$int_rate, "Interest Rate")
+#* 
+describe_feature <- function(feature, feature_name = "Feature") {
+  # show number of NAs
+  message(paste("Number of NAs: ", sum(is.na(feature))))
+  
+  # replace NA with 0
+  feature_handled<-replace_na(feature,0)
+  
+  # show number of unique values
+  message(paste("Number of unique values: ", length(unique(feature_handled))))
+  
+  # show number of zero values (relative)
+  message(paste("Sparsity relative: ", length(which(feature_handled == 0))/length(feature_handled)))
+  
+  # outliers detection (exclude null values as we have some very sparse attributes)
+  outliers<-boxplot.stats(feature_handled)$out
+  outliers_count<-length(outliers)
+  message(paste("Potential outliers (1.5 * IQR): ", outliers_count))
+  if (outliers_count>0) {
+    message(paste("Potential outlier range of values: ", toString(range(outliers))))
+  }
+  
+  # a deep-dive into the distribution
+  message(paste("98th, 99th and 99.9th percentiles: ", toString(quantile(feature_handled, c(.98, .99, .999)))))
+  message("Summary of distribution (also check the box plot and histogram): ")
+  boxplot(feature_handled, main=feature_name, xlab=feature_name)
+  hist(feature_handled, main=feature_name, xlab=feature_name)
+  summary(feature_handled) # keep it as last command in function
+}
+
+#**
+#* function to replace NAs with 0 or another value that we can pass as argument (e.g. a mean or median)
+#*
+handle_na <- function(feature, replace_with = 0) {
+  feature_handled<-replace_na(as.numeric(feature), replace_with)
+  return(feature_handled)
+}
+
+#**
+#* function to apply a (maximum) threshold value to outliers
+#* e.g., we can cut-off the annual income distribution at threshold = 150'000 USD - any value above will be replaced with 150'000 USD
+#* 
+apply_threshold <- function(feature, threshold = 1) {
+  feature_handled<-ifelse(feature>threshold, threshold, feature)
+}
+
+#**
+#* Function for min max scaling (standardization) of a feature
+#* e.g. when applying this function, the values in the collumn will be scaled to 0-1 range
+#* 
+min_max_scale <- function(x){(x-min(x))/(max(x)-min(x))}
+
+
+# =====================================================================
+# DATA PREPARATION
+# =====================================================================
+
+# Occupation Type: fill empty values with "NA"
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "NA")
 
-#head(df)
-#glimpse(df)
-View(df1)
+# one-hot encode categorical features with exactly 2 classes as 1 column
+df <- dummy_cols(df, select_columns = c(
+  "CODE_GENDER"
+), remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+# one-hot encode categorical features with more than 2 classes as 1 column per class
+df <- dummy_cols(df, select_columns = c(
+  "FLAG_OWN_CAR",
+  "FLAG_OWN_REALTY",
+  "NAME_INCOME_TYPE",
+  "NAME_EDUCATION_TYPE",
+  "NAME_FAMILY_STATUS",
+  "NAME_HOUSING_TYPE",
+  "FLAG_WORK_PHONE",
+  "FLAG_PHONE",
+  "FLAG_EMAIL",
+  "OCCUPATION_TYPE",
+  "status"
+), remove_first_dummy = FALSE, remove_selected_columns = TRUE)
+
+# take a loot at the modified dataframe
 View(df)
-#add in code the names of the columns 
-#create dummy variables and one-hot encode them
-df <- dummy_cols(df, select_columns = c("CODE_GENDER","FLAG_OWN_CAR","FLAG_OWN_REALTY",
-                                        "NAME_INCOME_TYPE","NAME_EDUCATION_TYPE",
-                                        "NAME_FAMILY_STATUS","NAME_HOUSING_TYPE",
-                                        "FLAG_WORK_PHONE","FLAG_PHONE","FLAG_EMAIL","OCCUPATION_TYPE","status"), 
-                 remove_selected_columns = TRUE)
 
-View(df)
+# Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
+describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount") # huge outliers, we apply a threshold of 1.5 * IQR: Q3 + 1.5 * (Q3 - Q1) = 225K + 1.5 * (225K - 112.5K) = 393.75K
+df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 393750)
+df$AMT_INCOME_TOTAL=min_max_scale(df$AMT_INCOME_TOTAL)
 
-#retired / recoded. create target dummies with column status, one-hot encode them into eight columns
-#status <-df$status
-#df_target <- data.frame(status)
-#View(df_target)
-#df_target_dummies<-df_target
-#numcol<-ncol(df_target_dummies)
-#df_target_dummies<-dummy_cols(df_target_dummies, select_columns = c("status"))
-#View(df_target_dummies)
-
-#remove status from df data frame, since it is stored now as dummies in d_target_dummies
-#df_subset <- subset(df, select = -status)
-#View(df_subset)
-#head(df_subset)
-#glimpse(df_subset)
-#change name to df1
-#df <- df_subset
-#View(df)
-
-#copy / paste from Marco: 
-#Function range that is applicable to columns with either all positive or negative values
-
-range01 <- function(x){(x-min(x))/(max(x)-min(x))}
-
-# sclae/normalize Income falling in 0-1 range
-
-df$AMT_INCOME_TOTAL<-range01(df$AMT_INCOME_TOTAL)
-
-#More intuitive to consider days of birth as a positive value
-
+# Days since birth: it is more intuitive to consider days since birth as a positive value
+describe_feature(df$DAYS_BIRTH, "Days since birth")
 df$DAYS_BIRTH<--(df$DAYS_BIRTH)
-df$DAYS_BIRTH<-range01(df$DAYS_BIRTH)
+df$DAYS_BIRTH<-min_max_scale(df$DAYS_BIRTH)
 
-#It is probable that when the data was missing they used a positive number, therefore we use this parameter as a penalization and assign to it the value 0 in order to then be able to standardize it with the in range function
-df$DAYS_EMPLOYED<-ifelse(df$DAYS_EMPLOYED>0,0,df$DAYS_EMPLOYED)
-df$DAYS_EMPLOYED<--df$DAYS_EMPLOYED
-df$DAYS_EMPLOYED<-range01(df$DAYS_EMPLOYED)
+# Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
+# indicates missing data. We will thus apply a threshold of 0 before normalizing the feature (scale to 0-1).
+describe_feature(df$DAYS_EMPLOYED, "Days employmed")
+df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
+describe_feature(df$DAYS_EMPLOYED, "Days employmed") # looks more like a powerlaw distribution now
+df$DAYS_EMPLOYED<-min_max_scale(df$DAYS_EMPLOYED)
 
-#scaling
+# Children count: normalize the feature
+describe_feature(df$CNT_CHILDREN, "Children count")
+df$CNT_CHILDREN<- min_max_scale(df$CNT_CHILDREN)
 
-df$CNT_CHILDREN<- range01(df$CNT_CHILDREN)
+# Family members count: normalize the feature
+describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
+df$CNT_FAM_MEMBERS<- min_max_scale(df$CNT_FAM_MEMBERS)
 
-#Scaling
+# check correlations between family and children count
+cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we keep only the family members count
 
-df$CNT_FAM_MEMBERS<- range01(df$CNT_FAM_MEMBERS)
+# drop the CNT_CHILDREN because is heavily correlated / redundant with CNT_FAM_MEMBERS
+df<-df[,-"CNT_CHILDREN"]
 
-#Unique value, FLAG_Mobile has always value "1", hence it is considered not relevant
+# Flag mobiles: all values are equal to 1, this feature is meaning less and we thus drop it
+describe_feature(df$FLAG_MOBIL, "Flag Mobile")
 df<-df[,-"FLAG_MOBIL"]
 
-#drop CNT_CHILDREN cause is redundant with CNT_FAM_MEMBERS, correlation: 0.87
 
-df<-df[,-"CNT_CHILDREN"]
+# Status (our class attribute for prediction!):
+# We tried to one-hot encode the status before. Here we try additionally to
+# encode them from 1 to 8 to see as it seemed to make the results better
+df$status_0<-ifelse(df$status_0=="1",1,0)
+df$status_1<-ifelse(df$status_1=="1",2,0)
+df$status_2<-ifelse(df$status_2=="1",3,0)
+df$status_3<-ifelse(df$status_3=="1",4,0)
+df$status_4<-ifelse(df$status_4=="1",5,0)
+df$status_5<-ifelse(df$status_5=="1",6,0)
+df$status_C<-ifelse(df$status_C=="1",7,0)
+df$status_X<-ifelse(df$status_X=="1",8,0)
+
+
+# remove the ID column
+df<-df[,-"ID"]
+
+
+# we are done with the data preparation - show a summary of the prepared df
+summary(df)
 View(df)
-colnames(df) #"status" 
 
 
-# transform your data frame into a matrix or array
-data_matrix <- as.matrix(df)
-dim(data_matrix)
-colnames(data_matrix)
+# not sure what Marco's intention was here - asked him on WeChat, for now commenting out
+#df_characters<-dummy_cols(df[,c(2,3,4,7,8,9,10,17)],)
+#df_characters<-df_characters[,-c(1,2,3,4,5,6,7,8)]
+#df_characters$ID<-df$ID
+#df_num<-select_if(df, is.numeric)
+#df <- merge(df_characters, df_num, by="ID", all.x = FALSE, all.y = FALSE)
 
-x <- data_matrix[, c(2:57)] # features
-y <- data_matrix[, c(58:65)] # target values
 
-# architecture
-model <- keras_model_sequential()
 
-model %>%
-  layer_dense(units = 8, activation = "relu", input_shape = ncol(x)) %>%
-  layer_dense(units = 8, activation = "softmax")
+# =====================================================================
+# TRAIN / TEST SET SPLITS
+# =====================================================================
 
-# compile
-model %>% compile(
-  loss = "categorical_crossentropy",
-  optimizer = "adam",
-  metrics = c("accuracy")
-)
 
-# train with k-fold
-k <- 10
+# TODO: balance the dataset with oversampling of the underrepresented classes
+# TODO: replace with k-fold test/train split
 
-set.seed(123)
+df_train<-df[1:50000,]
+#data_balanced_over <- ovun.sample(status ~., data =df_train , method = "over",N =50000*3)
 
-folds <- createFolds(y, k = k)
-i <- 1
-for (i in 1:k) {
-val_idx <- folds[[i]]
-train_idx <- unlist(folds[-i])
+# dataset prepared with simple holdout
+df_train<-as.matrix(df[1:50000,-c(54,55,56,57,58,59,60,61)])
+df_test<-as.matrix(df[50001:67614,-c(54,55,56,57,58,59,60,61)])
+df_label<-as.matrix(df[1:50000,c(54,55,56,57,58,59,60,61)])
+df_label_test<-as.matrix(df[50001:67614,c(54,55,56,57,58,59,60,61)])
+
+
+
+# =====================================================================
+# NEURAL NETWORK DESIGN AND FIT
+# =====================================================================
+
+#**
+#* function that builds our model (so that we can call it several times)
+#* 
+build_model <- function() {
   
-  # Use train_idx to select the rows of the data matrix for training
-x_fold_train <- x
-y_fold_train <- y
+  # Prepare the gradient descent optimizer (Marco may have an older version of
+  # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
+  SGD <- optimizer_sgd(
+    learning_rate = 0.01, # use "lr" in older releases of tensorflow
+    momentum = 0.9,
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow
+    nesterov = TRUE)
   
-  # Use val_idx to select the rows of the data matrix for validation
-x_fold_val <- x
-y_fold_val <- y
-  
-# Train the model on the current fold
-model %>% fit(
-  x = x_fold_train, y = y_fold_train,
-  epochs = 10,
-  batch_size = 32,
-  validation_data = list(x_fold_val, y_fold_val),
-  verbose = 0
-)
+  # Build the Keras network model
+  model <- keras_model_sequential() 
+  model %>% 
+    layer_dense(units = 200, activation = "relu", input_shape = c(55)) %>% 
+    layer_dense(units = 8, activation = "softmax")
 
-# Evaluate the model on the current fold
-fold_history <- model %>% evaluate(
-  x_fold_val, y_fold_val,
-  verbose = 0
-)
-
-# Save the training history for the current fold
-history[[i]] <- fold_history
-}
+  summary(model)
     
-# You can access the results of the cross-validation using the `results` object
-print(results)
-
-
-
-
-
-
-
-#....
-
-# Some memory clean-up
-k_clear_session()
-
-
-# Define the model architecture
-model <- keras_model_sequential() %>%
-  layer_dense(units = 58, input_shape = c(N), activation = "relu") %>%
-  layer_dense(units = 8, activation = "softmax")
-
-# Compile the model
-model %>% compile(
-  loss = "categorical_crossentropy",
-  optimizer = "adam",
-  metrics = c("accuracy")
-)
-
-# Define the k-fold cross-validation scheme
-k <- 10
-kfold <- createFold(y, k = k, list = TRUE, returnTrain = TRUE)
-
-# Initialize a list to store the evaluation scores
-scores <- list()
-
-# Loop through each fold
-for (i in 1:k) {
-  # Split the data into train and test sets
-  train_idx <- kfold[[i]]
-  test_idx <- setdiff(1:length(y), train_idx)
-  x_train <- x[train_idx, ]
-  y_train <- y[train_idx]
-  x_test <- x[test_idx, ]
-  y_test <- y[test_idx]
-  
-# Train the model on the train set
-model %>% fit(
-    x_train, y_train,
-    epochs = 10,
-    batch_size = 32
+  model %>% compile(
+    optimizer = SGD, # or: "rmsprop"
+    loss = "categorical_crossentropy", 
+    metrics = c("accuracy")
   )
-  
-# Evaluate the model on the test set
-score <- model %>% evaluate(x_test, y_test, verbose = 0)
-  
-# Store the evaluation score
-scores[[i]] <- score
 }
 
-# Compute the mean and standard deviation of the evaluation scores
-mean_score <- mean(sapply(scores, "[[", "accuracy"))
-sd_score <- sd(sapply(scores, "[[", "accuracy"))
+
+# Train the model
+model<-build_model()
+model %>%
+  fit(
+    df_train, df_label,
+    epochs = 100,
+    batch_size = 128
+  )
+
+# Evaluate the model
+metric< model %>% evaluate(df_test,df_label_test)
+metric
 
 
-#from holger: compute the average of the per-epoch MAE scores for all folds
-average_mae_history <- data.frame(
-  epoch = seq(1:ncol(all_mae_histories)),
-  validation_mae = apply(all_mae_histories, 2, mean)
-)
 
-#plot this
-library(ggplot2)
-ggplot(average_mae_history, aes(x = epoch, y = validation_mae)) + geom_line()
 
-#use `geom_smooth()` to try to get a clearer picture
-ggplot(average_mae_history, aes(x = epoch, y = validation_mae)) + geom_smooth()
 
-#According to this plot, it seems that validation MAE stops improving significantly after XY? epochs. Past that point, 
-#we start overfitting.
 
-#Once we are done tuning other parameters of our model, besides the number of epochs, one could also adjust the size of the 
-#hidden layers, we can train a final production model on all of the training data, with the best parameters, then look at 
-#its performance on the test data:
-# Get a fresh, compiled model.
-model <- build_model()
-
-# Train it on the entirety of the data.
-model %>% fit(train_data, train_targets,
-              epochs = 80, batch_size = 16, verbose = 0)
-
-result <- model %>% evaluate(test_data, test_targets)
-
-#compute result
-result
