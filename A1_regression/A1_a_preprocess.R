@@ -145,8 +145,9 @@ dim(df)    # we have 49 variables left after inital selection and ~798K observat
 str(df)
 glimpse(df)
 skim(df)
+View(df)
 
-# we need to filter for numeric variables to use corrplot and also handle NAs
+# we need to filter for numeric variables to use corrplot and also handle NAs first...
 # corrplot(df)
 
 # Initial observations:
@@ -169,11 +170,14 @@ skim(df)
 # --> verification_status: coded as string, may possible be interpreted in an order NOT VERIF < VERIF < VERIF BY LC or code as dummy vars
 # --> "term" is coded as string such as " 36 months" 
 #
-# scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value. For instance for income if
-# threshold is 150'000 USD we will replace all outliers >150'000 USD with 150'000 USD. Then we scale from 0-1 scale.
+# scaling: we may keep the minimum as 0 and use a percentage such as 99% to cut-off outliers. Outliers are replaced with the treshold value.
+# For instance for income if threshold is 150'000 USD we will replace all outliers >150'000 USD with 150'000 USD. Then we scale from 0-1 scale.
+# Gwen advised against it in coaching, pointint that the treshold value would be arbitrary. We can stick to the 1.5 * IRQ definition used in box plots
+# to stick to a common definition of outliers, or use something like 2 stdev around median. Just droping the outliers from the training set it not
+# a wise choice: in the unseen data we will also likely have some outliers - in unseen data we can not drop them but have to provide a prediction!
 #
-# data is from 2007 to 2015
-
+# data is from 2007 to 2015, we can assume that interest rates follow some temporal economic-cyclical pattern. However, Gwen mentioned in class that
+# we should full ignore this. In reality we would probably want to predict the interest spread from some inter-bank load interest rate (e.g. LIBOR).
 
 
 # =====================================================================
@@ -299,8 +303,9 @@ handle_states<-function(df) {
 }
 
 #**
-#* function to handle states data; this is based on findings from dummy encoding
+#* function to employment length data; this is based on findings from dummy encoding
 #* using the states with negative corr. coeff. ("good states") improved the result
+#* It is not a beauty of programming but it works ;)
 #* 
 handle_empt_length<-function(feature) {
   return(ifelse(feature=="< 1 year", 0.5,
@@ -329,16 +334,13 @@ handle_empt_length<-function(feature) {
 
 # we take a closer look at the int_rate, which is our target variable!
 # @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
-describe_feature(df$int_rate, "Interest Rate (%)")     # some outliers in the range 25.57 - 28.99
+# also, Gwen mentioned in email that we need to scale the MSE to report back to the "customer"
+describe_feature(df$int_rate, "Interest Rate (%)")     # some 5667 outliers in the range 25.57 - 28.99
 df_outliers<-subset(df, df$int_rate >= 25.57)
 skim(df_outliers)
 
-# @TODO - we need to check if the interest rate is statistically significantly different between single and joint applications !!
+# @TODO - we need to check if the interest rate is statistically significantly different between single and joint applications !! (no time - skipped)
 # ...
-# ...
-# ...
-# ...
-
 
 
 # Features that are possibly dependent on each other
@@ -377,7 +379,8 @@ df = subset(df, select = -c(
 # --------------------------------------------------------------------
 
 # zip codes shows a high number of unique values and low correlation to target
-# we also tried to use only 1 or 2 digits, but did not correlation, thus we drop
+# we also tried to use only 1 or 2 digits, but did not find any significant change in correlation
+# thus we drop the ZIP. Also, we will use "good states" as a separate feature later on.
 describe_feature(handle_zip(df$zip_code), "ZIP Codes 3 digits")
 describe_feature(handle_zip(df$zip_code, divide_by = 10), "ZIP Codes 2 digits")
 describe_feature(handle_zip(df$zip_code, divide_by = 100), "ZIP Codes 1 digits")
@@ -394,15 +397,16 @@ df_dummies<-df
 numcol<-ncol(df_dummies)
 df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status", "purpose","home_ownership","addr_state"))
 df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
+View(df_dummies)
 
-# compute the correlations with target variable for all dummy variable and keep only those with corr coeff < -0.05 or > 0.05
+# here we compute the correlations with target variable for each of the dummy variables and sort them descending by absolute value
+# (either strongly negative or strongly positive correlated on top). 
 z<-cor(df$int_rate,df_dummies)
 z[z == 1] <- NA #drop perfect
-z[abs(z) < 0.01] <- NA # drop less than abs(0.01)
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
 
-# the dummy vars that seem interesting are:
+# based on theses correlations, it seems the following dummy vars seem interesting tp pursue further!
 #
 # verification_status_Not Verified -0.21797238
 #     verification_status_Verified  0.21077114
@@ -427,7 +431,8 @@ df$emp_length<-handle_empt_length(df$emp_length)
 df$emp_length_numeric<-as.numeric(df$emp_length)
 describe_feature(df$emp_length_numeric, "Employment Length")
 
-# apply the median to the NAs in
+# apply the median of the distribution to the NAs in employment length (probably more robust than mean as the distribution is skewed because of the
+# last bin)
 df$emp_length_median<-df$emp_length_numeric
 df$emp_length_median[is.na(df$emp_length_median)]<-median(df$emp_length_median,na.rm=TRUE) # replace NAs with median
 describe_feature(df$emp_length_median, "Employment Length (median applied") # improves the correlation
@@ -437,28 +442,30 @@ df = subset(df, select = -c(
   emp_length_numeric
 ))
 
-# create a separate feature "good states" for the states that have neg. correlation
-# coeff with the target variable (this worked better as group rather than individually)
-df$Good_States<-handle_states(df)
-describe_feature(df$Good_States, "Good States")
+# create a separate feature "good states" for the states that have neg. correlation coeff with the target
+# variable (this worked better as group rather than using dummy encoded states individually)
+df$good_states<-handle_states(df)
+describe_feature(df$good_states, "Good States")
 df = subset(df, select = -c(
   addr_state
 ))
+View(df)
 
 
 # annual_inc
-# (!) missing values should refer to 0 income people, I saw the description and are usually students or people
-# that doesn't have an employment desc. However doesn't impact the type of replacement because there are 4.
+# (!) missing values should refer to 0 income people: according to dataset documentation these are usually students
+# or people that do not have an employment descrition. However doesn't impact the type of replacement because there are 4 in total.
 describe_feature(df$annual_inc, "Annual Income") # -0.073 correlation
 df$annual_inc<-handle_na(df$annual_inc)
-df$annual_inc<-apply_threshold(df$annual_inc, threshold = 150000)
-describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.112 correlation
+df$annual_inc<-apply_threshold(df$annual_inc, threshold = 157500) # applying 1.5*IRQ method: Q3 + 1.5 * (Q3 - Q1) = 90K + 1.5 * (90K - 45K) = 157500
+describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.11 correlation
 
 
 # dti
-describe_feature(df$dti) # has outliers, threshold at 99.9% percentile (39.73) seems good
-df$dti<-apply_threshold(df$dti, threshold = 39.73) # produces nice bell.shaped curve --> replace NA with median
+describe_feature(df$dti, "DTI") # has outliers, threshold at 99.9% percentile (39.73) seems good
+df$dti<-apply_threshold(df$dti, threshold = 39.73) # produces nice bell.shaped curve --> replace NA with median in next step
 df$dti = handle_na(df$dti)
+describe_feature(df$dti, "DTI (thresholded)")
 
 # dti_joint
 df$dti_joint = handle_na(df$dti_joint)
@@ -645,10 +652,31 @@ boxplot(df$annual_inc, main="Annual Income")
 
 
 
-#train split (choose the number of raw by changing the percentage in the row_train)
-
-variables_for_prediction<-df[,c("Class_Income","emp_length2","total_acc","revol_bal","tot_cur_bal","purpose_car","Good_employment","inq_last_6mths","revol_util","Loan_to_Wealth_index","verification_status_Not Verified","declared_dti","Has_something_wrong_done","purpose_credit_card","purpose_debt_consolidation","purpose_house","purpose_medical","purpose_moving","purpose_other",
-                                "purpose_small_business","int_rate")]
+# train split (choose the number of raw by changing the percentage in the row_train)
+# TODO - this train / test split is not good --> we should randomize the dataset first before holdout of test data!
+variables_for_prediction<-df[, c(
+                               "Class_Income"
+                               "emp_length2",
+                               "total_acc",
+                               "revol_bal",
+                               "tot_cur_bal",
+                               "purpose_car",
+                               "Good_employment",
+                               "inq_last_6mths",
+                               "revol_util",
+                               "Loan_to_Wealth_index",
+                               "verification_status_Not Verified",
+                               "declared_dti",
+                               "Has_something_wrong_done",
+                               "purpose_credit_card",
+                               "purpose_debt_consolidation",
+                               "purpose_house",
+                               "purpose_medical",
+                               "purpose_moving",
+                               "purpose_other",
+                               "purpose_small_business",
+                               "int_rate"
+                             )]
 nrow_train<-round(nrow(variables_for_prediction)*0.75,0)
 Train_data<-variables_for_prediction[0:nrow_train,]
 Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction),]
