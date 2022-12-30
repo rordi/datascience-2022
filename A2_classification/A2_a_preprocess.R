@@ -388,10 +388,12 @@ build_model <- function() {
   # Prepare the gradient descent optimizer (Marco may have an older version of
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   SGD <- optimizer_sgd(
-    learning_rate = 0.01, # use "lr" in older releases of tensorflow
+    learning_rate = 1e-6, # use "lr" in older releases of tensorflow
     momentum = 0.9,
     weight_decay = 1e-6, # use "decay" in older releases of tensorflow
-    nesterov = TRUE)
+    nesterov = FALSE,
+    clipnorm = NULL,
+    clipvalue = NULL)
   
   # Build the Keras network model
   model <- keras_model_sequential() 
@@ -402,7 +404,7 @@ build_model <- function() {
   summary(model)
     
   model %>% compile(
-    optimizer = SGD, # or: "rmsprop"
+    optimizer = SGD, # "rmsprop" or SDG
     loss = "categorical_crossentropy", 
     metrics = c("accuracy")
   )
@@ -414,7 +416,7 @@ model<-build_model()
 model %>%
   fit(
     df_train, df_label,
-    epochs = 100,
+    epochs = 1000,
     batch_size = 128
   )
 
