@@ -398,7 +398,7 @@ build_model <- function() {
   # Build the Keras network model
   model <- keras_model_sequential() 
   model %>% 
-    layer_dense(units = 200, activation = "relu", input_shape = c(55)) %>% 
+    layer_dense(units = 32, activation = "relu", input_shape = c(55)) %>% 
     layer_dense(units = 8, activation = "softmax")
 
   summary(model)
@@ -416,7 +416,7 @@ model<-build_model()
 model %>%
   fit(
     df_train, df_label,
-    epochs = 1000,
+    epochs = 391, # loss increases again after 391 epochs, max accuracy is reached after ~50 epochs
     batch_size = 128
   )
 
