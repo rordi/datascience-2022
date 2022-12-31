@@ -353,11 +353,13 @@ View(df)
 # Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
 describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount") # huge outliers, we apply a threshold of 1.5 * IQR: Q3 + 1.5 * (Q3 - Q1) = 225K + 1.5 * (225K - 112.5K) = 393.75K
 df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 393750)
+df$AMT_INCOME_TOTAL<-scale(df$AMT_INCOME_TOTAL)
 df$AMT_INCOME_TOTAL<-min_max_normalize(df$AMT_INCOME_TOTAL)
 
 # Days since birth: it is more intuitive to consider days since birth as a positive value
 describe_feature(df$DAYS_BIRTH, "Days since birth")
 df$DAYS_BIRTH<-abs(df$DAYS_BIRTH)
+df$DAYS_BIRTH<-scale(df$DAYS_BIRTH)
 df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 
 # Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
@@ -365,14 +367,17 @@ df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 describe_feature(df$DAYS_EMPLOYED, "Days employmed")
 df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
 describe_feature(df$DAYS_EMPLOYED, "Days employmed") # looks more like a powerlaw distribution now
+df$DAYS_EMPLOYED<-scale(df$DAYS_EMPLOYED)
 df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED)
 
 # Children count: normalize the feature
 describe_feature(df$CNT_CHILDREN, "Children count")
+df$CNT_CHILDREN<-scale(df$CNT_CHILDREN)
 df$CNT_CHILDREN<-min_max_normalize(df$CNT_CHILDREN)
 
 # Family members count: normalize the feature
 describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
+df$CNT_FAM_MEMBERS<-scale(df$CNT_FAM_MEMBERS)
 df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS)
 
 # check correlations between family and children count
