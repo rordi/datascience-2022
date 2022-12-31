@@ -150,7 +150,6 @@ install.packages("fastDummies")
 install.packages("corrplot")
 install.packages("data.table")
 install.packages("tidyr")
-install.packages("ROSE")
 
 
 library(Sequential)
@@ -163,7 +162,6 @@ library(fastDummies)
 library(corrplot)
 library(data.table)
 library(tidyr)
-library(ROSE)
 
 
 
@@ -173,9 +171,52 @@ library(ROSE)
 # =====================================================================
 
 # read the data from the CSV
-df<- fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
+df<-fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
 
-# first we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV!)
+
+# we later found that the class status was very imbalanced (1 majority class and 7 underrepresented classes). Thus we immediately
+# resample here at the beginning before doing anything elses. Because we have only 64K observations, we choose to oversample the
+# underrepresented classes.
+table(df$status)
+# 0      1     2    3    4    5    C     X 
+# 52133  6491  712  195  114  374  1805  5790 
+
+# naive approach: we just duplicate each class until we reach ~52K per class (a better approach could be knn or the like, but we don't have time)
+# 1 --> 52133 / 6491 - 1 = 7
+# 2 --> 52133 / 712 - 1 = 72
+# 3 --> 52133 / 195 - 1 = 266
+# 4 --> 52133 / 114 - 1 = 456
+# 5 --> 52133 / 374 - 1 = 138
+# C --> 52133 / 1805 - 1= 28
+# X --> 52133 / 5790 - 1 = 8
+#
+# next we define a helper function that can help us to oversample each class by duplicating it n times
+
+#**
+#* Function to copy dataset over itself (n = 1 --> 2x data, n = 2 --> 4x data, n = 3 --> 8x data)
+#* e.g. when using large epochs like 1000 we need enough data, with this function we can just duplicate the dataset n times
+#*  
+copy_class_data <- function(df, n, class) {
+  df_class<-filter(df, status == class)
+  for (i in 1:n) {
+    df<-rbind(df, df_class)
+  }
+  return (df)
+}
+
+# let's oversample each class according to the factors we calculated above
+df<-copy_class_data(df, n=7, class="1")
+df<-copy_class_data(df, n=72, class="2")
+df<-copy_class_data(df, n=266, class="3")
+df<-copy_class_data(df, n=456, class="4")
+df<-copy_class_data(df, n=138, class="5")
+df<-copy_class_data(df, n=28, class="C")
+df<-copy_class_data(df, n=8, class="X")
+
+# let's have a check: each class should have somewhere close to 52K representants
+table(df$status)
+
+# no we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV and we appended all minority classes at the end)
 df[sample(1:nrow(df)), ]
 
 
@@ -271,17 +312,6 @@ apply_threshold <- function(feature, threshold = 1) {
 min_max_normalize <- function(x) {
   # then we apply min-max normalization so that values are between 0 and 1
   return ((x-min(x))/(max(x)-min(x)))
-}
-
-#**
-#* Function to copy dataset over itself (n = 1 --> 2x data, n = 2 --> 4x data, n = 3 --> 8x data)
-#* e.g. when using large epochs like 1000 we need enough data, with this function we can just duplicate the dataset n times
-#*  
-copy_data <- function(data_array, n) {
-  for (i in 1:n) {
-    data_array<-rbind(data_array, data_array)
-  }
-  return (data_array)
 }
 
 
@@ -401,7 +431,7 @@ View(df)
 # TODO: balance the dataset with oversampling of the underrepresented classes
 # TODO: replace with k-fold test/train split
 
-test_split = 0.1
+test_split = 0.2
 train_row =  (nrow(df)-round(nrow(df)*test_split, digits = 0))
 test_row = (train_row + 1)
 
@@ -412,9 +442,6 @@ data_train_label<-as.matrix(df_label[0:train_row,])
 # prepare test data as a matrix
 data_test<-as.matrix(df[test_row:nrow(df),])
 data_test_label<-as.matrix(df_label[test_row:nrow(df),])
-
-#data_balanced_over <- ovun.sample(status ~., data =df_train , method = "over",N =50000*3)
-
 
 
 # =====================================================================
@@ -429,11 +456,11 @@ build_model <- function(shape_input, shape_output) {
   # Prepare the gradient descent optimizer (Marco may have an older version of
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   SGD <- optimizer_sgd(
-    #learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
-    lr = 1e-6,
+    learning_rate = 1e-4, # use "lr" in older releases of tensorflow !
+    #lr = 1e-4,
     momentum = 0.9,
-    #weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
-    decay = 1e-6,
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    #decay = 1e-6,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
