@@ -193,8 +193,7 @@ table(df$status)
 # next we define a helper function that can help us to oversample each class by duplicating it n times
 
 #**
-#* Function to copy dataset over itself (n = 1 --> 2x data, n = 2 --> 4x data, n = 3 --> 8x data)
-#* e.g. when using large epochs like 1000 we need enough data, with this function we can just duplicate the dataset n times
+#* A simple function to oversample a minority class by simply duplicating it's rows n times
 #*  
 copy_class_data <- function(df, n, class) {
   df_class<-filter(df, status == class)
