@@ -166,7 +166,18 @@ library(tidyr)
 library(ROSE)
 
 
+
+
+# =====================================================================
+# LOAD DATA INTO DATAFRAME
+# =====================================================================
+
+# read the data from the CSV
 df<- fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
+
+# first we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV!)
+df[sample(1:nrow(df)), ]
+
 
 
 # =====================================================================
@@ -257,34 +268,83 @@ apply_threshold <- function(feature, threshold = 1) {
 #* Function for min max scaling (standardization) of a feature
 #* e.g. when applying this function, the values in the collumn will be scaled to 0-1 range
 #* 
-min_max_scale <- function(x){(x-min(x))/(max(x)-min(x))}
+min_max_normalize <- function(x) {
+  # then we apply min-max normalization so that values are between 0 and 1
+  return ((x-min(x))/(max(x)-min(x)))
+}
+
+#**
+#* Function to copy dataset over itself (n = 1 --> 2x data, n = 2 --> 4x data, n = 3 --> 8x data)
+#* e.g. when using large epochs like 1000 we need enough data, with this function we can just duplicate the dataset n times
+#*  
+copy_data <- function(data_array, n) {
+  for (i in 1:n) {
+    data_array<-rbind(data_array, data_array)
+  }
+  return (data_array)
+}
 
 
 # =====================================================================
 # DATA PREPARATION
 # =====================================================================
 
-# Occupation Type: fill empty values with "NA"
-df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "NA")
 
-# one-hot encode categorical features with exactly 2 classes as 1 column
-df <- dummy_cols(df, select_columns = c(
-  "CODE_GENDER"
-), remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+# we move the status (our target class attribute) into a separate dataframe. It is important not to randomize the
+# order of the data in the dataframe after this step as otherwise the position of a row in df no longer corresponds
+# with the order of the corresponding label in the df_label
+status<-df$status
+df_label<-data.frame(status, stringsAsFactors = TRUE) # create new dataframe just with the status col
+df_label$status<-df_label$status %>% as.numeric() # convert to numeric  (will encode X and C into 7 and 8)
+df_label$status<-df_label$status-1 # substract 1 from all status codes so that we have a range 0 to 7
+unique(df_label$status)
+df_label<-to_categorical(df_label$status, num_classes=8) # one-hot encode the status labels into 8 cols V1 to V8
+View(df_label)
+df<-df[,-"status"] # remove status label from the original df
 
-# one-hot encode categorical features with more than 2 classes as 1 column per class
+
+# remove the ID column
+df<-df[,-"ID"]
+
+# look at the unique values in what seems to be categorical input variables
+unique(df$CODE_GENDER) # M and F -> encode as 1 col 1/0
+unique(df$FLAG_OWN_CAR) # Y and N -> encode as 1 col 1/0
+unique(df$FLAG_OWN_REALTY) # Y and N -> encode as 1 col 1/0
+unique(df$FLAG_WORK_PHONE) # 0 and 1, no further encoding needed
+unique(df$FLAG_PHONE) # 0 and 1, no further encoding needed
+unique(df$FLAG_EMAIL) # 0 and 1, no further encoding needed
+unique(df$FLAG_MOBILE) # all values are null -> drop this column
+unique(df$NAME_INCOME_TYPE) # "Pensioner", "Commercial associate", "Working", "State servant", "Student" --> TODO possibly "Commercial associate", "Working", "State servant" can be combined
+unique(df$NAME_EDUCATION_TYPE) # "Secondary / secondary special", "Higher education", "Incomplete higher", "Lower secondary", "Academic degree" --> TODO possibly "Higher education" and "Academic degree" can be combined
+unique(df$NAME_FAMILY_STATUS) # "Married", "Separated", "Widow, "Civil marriage", "Single / not married" --> TODO combine "Married" and "Civil marriage"
+unique(df$NAME_HOUSING_TYPE) # "House / apartment", "Rented apartment", "With parents", "Municipal apartment", "Office apartment", "Co-op apartment" --> TODO combine all apartments
+unique(df$OCCUPATION_TYPE) # 18 categories plus missing (NA) values --> encode missing values as string "None" so that those will also be one-ht encoded
+
+# Code gender: encode M --> 1 and F --> 0 (no gender bias intended!) as new col with suffix _M and remove original column
+df$CODE_GENDER_M<-ifelse(df$CODE_GENDER=="M", 1, 0)
+df<-df[,-"CODE_GENDER"]
+
+# Flag Own Car: encode Y --> 1 and N --> 0 as new col with suffix _Y and remove original column
+df$FLAG_OWN_CAR_Y<-ifelse(df$FLAG_OWN_CAR=="Y", 1, 0)
+df<-df[,-"FLAG_OWN_CAR"]
+
+# Flag Own Realty: encode Y --> 1 and N --> 0 as new col with suffix _Y and remove original column
+df$FLAG_OWN_REALTY_Y<-ifelse(df$FLAG_OWN_REALTY=="Y", 1, 0)
+df<-df[,-"FLAG_OWN_REALTY"]
+
+# Flag mobiles: drop column, all values are equal
+df<-df[,-"FLAG_MOBIL"]
+
+# Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
+df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "None")
+
+# All other catgorical features are muti-class (>2 classes) and need special one-hot encoding into one col per unique class value
 df <- dummy_cols(df, select_columns = c(
-  "FLAG_OWN_CAR",
-  "FLAG_OWN_REALTY",
   "NAME_INCOME_TYPE",
   "NAME_EDUCATION_TYPE",
   "NAME_FAMILY_STATUS",
   "NAME_HOUSING_TYPE",
-  "FLAG_WORK_PHONE",
-  "FLAG_PHONE",
-  "FLAG_EMAIL",
-  "OCCUPATION_TYPE",
-  "status"
+  "OCCUPATION_TYPE"
 ), remove_first_dummy = FALSE, remove_selected_columns = TRUE)
 
 # take a loot at the modified dataframe
@@ -293,27 +353,27 @@ View(df)
 # Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
 describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount") # huge outliers, we apply a threshold of 1.5 * IQR: Q3 + 1.5 * (Q3 - Q1) = 225K + 1.5 * (225K - 112.5K) = 393.75K
 df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 393750)
-df$AMT_INCOME_TOTAL=min_max_scale(df$AMT_INCOME_TOTAL)
+df$AMT_INCOME_TOTAL<-min_max_normalize(df$AMT_INCOME_TOTAL)
 
 # Days since birth: it is more intuitive to consider days since birth as a positive value
 describe_feature(df$DAYS_BIRTH, "Days since birth")
-df$DAYS_BIRTH<--(df$DAYS_BIRTH)
-df$DAYS_BIRTH<-min_max_scale(df$DAYS_BIRTH)
+df$DAYS_BIRTH<-abs(df$DAYS_BIRTH)
+df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 
 # Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
 # indicates missing data. We will thus apply a threshold of 0 before normalizing the feature (scale to 0-1).
 describe_feature(df$DAYS_EMPLOYED, "Days employmed")
 df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
 describe_feature(df$DAYS_EMPLOYED, "Days employmed") # looks more like a powerlaw distribution now
-df$DAYS_EMPLOYED<-min_max_scale(df$DAYS_EMPLOYED)
+df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED)
 
 # Children count: normalize the feature
 describe_feature(df$CNT_CHILDREN, "Children count")
-df$CNT_CHILDREN<- min_max_scale(df$CNT_CHILDREN)
+df$CNT_CHILDREN<-min_max_normalize(df$CNT_CHILDREN)
 
 # Family members count: normalize the feature
 describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
-df$CNT_FAM_MEMBERS<- min_max_scale(df$CNT_FAM_MEMBERS)
+df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS)
 
 # check correlations between family and children count
 cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we keep only the family members count
@@ -321,39 +381,10 @@ cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we 
 # drop the CNT_CHILDREN because is heavily correlated / redundant with CNT_FAM_MEMBERS
 df<-df[,-"CNT_CHILDREN"]
 
-# Flag mobiles: all values are equal to 1, this feature is meaning less and we thus drop it
-describe_feature(df$FLAG_MOBIL, "Flag Mobile")
-df<-df[,-"FLAG_MOBIL"]
 
-
-# Status (our class attribute for prediction!):
-# We tried to one-hot encode the status before. Here we try additionally to
-# encode them from 1 to 8 to see as it seemed to make the results better
-df$status_0<-ifelse(df$status_0=="1",1,0)
-df$status_1<-ifelse(df$status_1=="1",2,0)
-df$status_2<-ifelse(df$status_2=="1",3,0)
-df$status_3<-ifelse(df$status_3=="1",4,0)
-df$status_4<-ifelse(df$status_4=="1",5,0)
-df$status_5<-ifelse(df$status_5=="1",6,0)
-df$status_C<-ifelse(df$status_C=="1",7,0)
-df$status_X<-ifelse(df$status_X=="1",8,0)
-
-
-# remove the ID column
-df<-df[,-"ID"]
-
-
-# we are done with the data preparation - show a summary of the prepared df
+# we are done with the data preparation for the input variables - show a summary of the prepared df
 summary(df)
 View(df)
-
-
-# not sure what Marco's intention was here - asked him on WeChat, for now commenting out
-#df_characters<-dummy_cols(df[,c(2,3,4,7,8,9,10,17)],)
-#df_characters<-df_characters[,-c(1,2,3,4,5,6,7,8)]
-#df_characters$ID<-df$ID
-#df_num<-select_if(df, is.numeric)
-#df <- merge(df_characters, df_num, by="ID", all.x = FALSE, all.y = FALSE)
 
 
 
@@ -365,14 +396,19 @@ View(df)
 # TODO: balance the dataset with oversampling of the underrepresented classes
 # TODO: replace with k-fold test/train split
 
-df_train<-df[1:50000,]
-#data_balanced_over <- ovun.sample(status ~., data =df_train , method = "over",N =50000*3)
+test_split = 0.1
+train_row =  (nrow(df)-round(nrow(df)*test_split, digits = 0))
+test_row = (train_row + 1)
 
-# dataset prepared with simple holdout
-df_train<-as.matrix(df[1:50000,-c(54,55,56,57,58,59,60,61)])
-df_test<-as.matrix(df[50001:67614,-c(54,55,56,57,58,59,60,61)])
-df_label<-as.matrix(df[1:50000,c(54,55,56,57,58,59,60,61)])
-df_label_test<-as.matrix(df[50001:67614,c(54,55,56,57,58,59,60,61)])
+# prepare train data as a matrix (keras does not like dataframes)
+data_train<-as.matrix(df[0:train_row,])
+data_train_label<-as.matrix(df_label[0:train_row,])
+
+# prepare test data as a matrix
+data_test<-as.matrix(df[test_row:nrow(df),])
+data_test_label<-as.matrix(df_label[test_row:nrow(df),])
+
+#data_balanced_over <- ovun.sample(status ~., data =df_train , method = "over",N =50000*3)
 
 
 
@@ -383,23 +419,27 @@ df_label_test<-as.matrix(df[50001:67614,c(54,55,56,57,58,59,60,61)])
 #**
 #* function that builds our model (so that we can call it several times)
 #* 
-build_model <- function() {
+build_model <- function(shape_input, shape_output) {
   
   # Prepare the gradient descent optimizer (Marco may have an older version of
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   SGD <- optimizer_sgd(
-    learning_rate = 1e-6, # use "lr" in older releases of tensorflow
+    learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
     momentum = 0.9,
-    weight_decay = 1e-6, # use "decay" in older releases of tensorflow
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
-  
+
+  # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
+  hidden_layer = round((shape_input+shape_output)/2, digits = 0)
+
   # Build the Keras network model
   model <- keras_model_sequential() 
   model %>% 
-    layer_dense(units = 32, activation = "relu", input_shape = c(55)) %>% 
-    layer_dense(units = 8, activation = "softmax")
+    layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%   # first layer, n = input shape
+    layer_dense(units = hidden_layer, activation = "relu") %>%                                  # hidden laser, n ca. mean of input and outpu shapre (rule of thumb)
+    layer_dense(units = shape_output, activation = "softmax")                                    # last hidden layer, n = number of classes, with softmax activation
 
   summary(model)
     
@@ -411,21 +451,23 @@ build_model <- function() {
 }
 
 
+# force deelte any lefotvers from previous runs!
+rm(model)
+rm(metrics)
+
 # Train the model
-model<-build_model()
+shape_input=ncol(df)
+shape_output=ncol(df_label)
+model<-build_model(shape_input, shape_output)
 model %>%
   fit(
-    df_train, df_label,
-    epochs = 391, # loss increases again after 391 epochs, max accuracy is reached after ~50 epochs
+    data_train, data_train_label,
+    epochs = 50, # loss increases again after 391 epochs, max accuracy is reached after ~50 epochs
     batch_size = 128
   )
 
 # Evaluate the model
-metric< model %>% evaluate(df_test,df_label_test)
-metric
-
-
-
-
+metrics<-model %>% evaluate(data_test, data_test_label)
+metrics
 
 
