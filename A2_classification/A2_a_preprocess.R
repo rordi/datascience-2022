@@ -150,7 +150,6 @@ install.packages("fastDummies")
 install.packages("corrplot")
 install.packages("data.table")
 install.packages("tidyr")
-install.packages("ROSE")
 
 
 library(Sequential)
@@ -163,7 +162,6 @@ library(fastDummies)
 library(corrplot)
 library(data.table)
 library(tidyr)
-library(ROSE)
 
 
 
@@ -173,9 +171,9 @@ library(ROSE)
 # =====================================================================
 
 # read the data from the CSV
-df<- fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
+df<-fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
 
-# first we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV!)
+# no we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV)
 df[sample(1:nrow(df)), ]
 
 
@@ -273,34 +271,10 @@ min_max_normalize <- function(x) {
   return ((x-min(x))/(max(x)-min(x)))
 }
 
-#**
-#* Function to copy dataset over itself (n = 1 --> 2x data, n = 2 --> 4x data, n = 3 --> 8x data)
-#* e.g. when using large epochs like 1000 we need enough data, with this function we can just duplicate the dataset n times
-#*  
-copy_data <- function(data_array, n) {
-  for (i in 1:n) {
-    data_array<-rbind(data_array, data_array)
-  }
-  return (data_array)
-}
-
 
 # =====================================================================
 # DATA PREPARATION
 # =====================================================================
-
-
-# we move the status (our target class attribute) into a separate dataframe. It is important not to randomize the
-# order of the data in the dataframe after this step as otherwise the position of a row in df no longer corresponds
-# with the order of the corresponding label in the df_label
-status<-df$status
-df_label<-data.frame(status, stringsAsFactors = TRUE) # create new dataframe just with the status col
-df_label$status<-df_label$status %>% as.numeric() # convert to numeric  (will encode X and C into 7 and 8)
-df_label$status<-df_label$status-1 # substract 1 from all status codes so that we have a range 0 to 7
-unique(df_label$status)
-df_label<-to_categorical(df_label$status, num_classes=8) # one-hot encode the status labels into 8 cols V1 to V8
-View(df_label)
-df<-df[,-"status"] # remove status label from the original df
 
 
 # remove the ID column
@@ -392,28 +366,85 @@ summary(df)
 View(df)
 
 
+# =====================================================================
+# HANDLE CLASS ATTRIBUTE
+# =====================================================================
+
+df$status_factor<-df$status %>% as.factor()
+df$status_numeric<-df$status_factor %>% as.numeric() # convert to numeric  (will encode classes from 1 to 8)
+df$status_numeric<-df$status_numeric-1 # substract 1 from all status codes so that we have a range 0 to 7
+table(df$status_numeric)
+
+df<-df[,-"status"] # remove status label from the original df
+df<-df[,-"status_factor"] # remove status_factor label from the original df
+View (df)
+
 
 # =====================================================================
-# TRAIN / TEST SET SPLITS
+# HANDLE CLASS IMBALANCE AND CREATE TRAIN / TEST SET SPLITS
 # =====================================================================
 
+#**
+#* A simple function to oversample a minority class by simply duplicating it's rows n times
+#*  
+copy_class_data <- function(df_train, n, class) {
+  df_class<-filter(df_train, status_numeric == class)
+  for (j in 1:n) {
+    df_train<-rbind(df_train, df_class)
+  }
+  return (df_train)
+}
 
-# TODO: balance the dataset with oversampling of the underrepresented classes
+#**
+#* A simple function to balance classes by oversampling (copying) the minority classes
+#*  
+balance_classes<-function (df_train) {
+  num_majority = sum(df_train$status == 0) # number of values of the majority class
+  for (i in 1:7) {
+    num_minority = sum(df_train$status == i) # number of values of the minority class
+    duplication_factor = round(num_majority / num_minority, digits = 0) - 1
+    df_train<-copy_class_data(df_train, n=duplication_factor, class=i)
+  }
+  
+  return (df_train)
+}
+
+
 # TODO: replace with k-fold test/train split
 
-test_split = 0.1
+test_split = 0.2
 train_row =  (nrow(df)-round(nrow(df)*test_split, digits = 0))
 test_row = (train_row + 1)
 
-# prepare train data as a matrix (keras does not like dataframes)
-data_train<-as.matrix(df[0:train_row,])
-data_train_label<-as.matrix(df_label[0:train_row,])
+# prepare train data, oversample minority classes, encode labels
+df_train<-df[0:train_row,]
+df_train<-balance_classes(df_train)
+table(df_train$status_numeric) # class values should be balanced now!
 
-# prepare test data as a matrix
-data_test<-as.matrix(df[test_row:nrow(df),])
-data_test_label<-as.matrix(df_label[test_row:nrow(df),])
+# one-hot encode the status labels as a matrix
+data_train_label<-to_categorical(df_train$status_numeric, num_classes=8)
 
-#data_balanced_over <- ovun.sample(status ~., data =df_train , method = "over",N =50000*3)
+# remove status columns from df_train and convert to matrix
+df_train<-df_train[,-"status_numeric"]
+data_train<-as.matrix(df_train)
+
+View(data_train)
+View(data_train_label)
+
+
+# prepare the test data (on test data we do NOT handle the class imbalance!)
+df_test<-df[test_row:nrow(df),]
+
+# one-hot encode the status labels as a matrix
+data_test_label<-to_categorical(df_test$status_numeric, num_classes=8)
+
+# remove status columns from df_test and convert to matrix
+df_test<-df_test[,-"status_numeric"]
+data_test<-as.matrix(df_test)
+
+View(data_test)
+View(data_test_label)
+
 
 
 
@@ -429,11 +460,11 @@ build_model <- function(shape_input, shape_output) {
   # Prepare the gradient descent optimizer (Marco may have an older version of
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   SGD <- optimizer_sgd(
-    #learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
-    lr = 1e-6,
+    learning_rate = 1e-4, # use "lr" in older releases of tensorflow !
+    #lr = 1e-4,
     momentum = 0.9,
-    #weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
-    decay = 1e-6,
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    #decay = 1e-6,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
@@ -458,19 +489,19 @@ build_model <- function(shape_input, shape_output) {
 }
 
 
-# force deelte any lefotvers from previous runs!
+# force delete any leftovers from previous runs!
 rm(model)
 rm(metrics)
 
 # Train the model
-shape_input=ncol(df)
-shape_output=ncol(df_label)
+shape_input=50
+shape_output=8 
 model<-build_model(shape_input, shape_output)
 model %>%
   fit(
     data_train, data_train_label,
-    epochs = 1000,
-    batch_size = 128
+    epochs = 100,
+    batch_size = 64
   )
 
 # Evaluate the model
