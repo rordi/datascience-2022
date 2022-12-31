@@ -429,9 +429,11 @@ build_model <- function(shape_input, shape_output) {
   # Prepare the gradient descent optimizer (Marco may have an older version of
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   SGD <- optimizer_sgd(
-    learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
+    #learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
+    lr = 1e-6,
     momentum = 0.9,
-    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    #weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    decay = 1e-6,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
