@@ -173,49 +173,7 @@ library(tidyr)
 # read the data from the CSV
 df<-fread("./A2_classification/Dataset-part-2.csv", sep = ",", header = TRUE)
 
-
-# we later found that the class status was very imbalanced (1 majority class and 7 underrepresented classes). Thus we immediately
-# resample here at the beginning before doing anything elses. Because we have only 64K observations, we choose to oversample the
-# underrepresented classes.
-table(df$status)
-# 0      1     2    3    4    5    C     X 
-# 52133  6491  712  195  114  374  1805  5790 
-
-# naive approach: we just duplicate each class until we reach ~52K per class (a better approach could be knn or the like, but we don't have time)
-# 1 --> 52133 / 6491 - 1 = 7
-# 2 --> 52133 / 712 - 1 = 72
-# 3 --> 52133 / 195 - 1 = 266
-# 4 --> 52133 / 114 - 1 = 456
-# 5 --> 52133 / 374 - 1 = 138
-# C --> 52133 / 1805 - 1= 28
-# X --> 52133 / 5790 - 1 = 8
-#
-# next we define a helper function that can help us to oversample each class by duplicating it n times
-
-#**
-#* A simple function to oversample a minority class by simply duplicating it's rows n times
-#*  
-copy_class_data <- function(df, n, class) {
-  df_class<-filter(df, status == class)
-  for (i in 1:n) {
-    df<-rbind(df, df_class)
-  }
-  return (df)
-}
-
-# let's oversample each class according to the factors we calculated above
-df<-copy_class_data(df, n=7, class="1")
-df<-copy_class_data(df, n=72, class="2")
-df<-copy_class_data(df, n=266, class="3")
-df<-copy_class_data(df, n=456, class="4")
-df<-copy_class_data(df, n=138, class="5")
-df<-copy_class_data(df, n=28, class="C")
-df<-copy_class_data(df, n=8, class="X")
-
-# let's have a check: each class should have somewhere close to 52K representants
-table(df$status)
-
-# no we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV and we appended all minority classes at the end)
+# no we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV)
 df[sample(1:nrow(df)), ]
 
 
@@ -319,19 +277,6 @@ min_max_normalize <- function(x) {
 # =====================================================================
 
 
-# we move the status (our target class attribute) into a separate dataframe. It is important not to randomize the
-# order of the data in the dataframe after this step as otherwise the position of a row in df no longer corresponds
-# with the order of the corresponding label in the df_label
-status<-df$status
-df_label<-data.frame(status, stringsAsFactors = TRUE) # create new dataframe just with the status col
-df_label$status<-df_label$status %>% as.numeric() # convert to numeric  (will encode X and C into 7 and 8)
-df_label$status<-df_label$status-1 # substract 1 from all status codes so that we have a range 0 to 7
-unique(df_label$status)
-df_label<-to_categorical(df_label$status, num_classes=8) # one-hot encode the status labels into 8 cols V1 to V8
-View(df_label)
-df<-df[,-"status"] # remove status label from the original df
-
-
 # remove the ID column
 df<-df[,-"ID"]
 
@@ -421,26 +366,86 @@ summary(df)
 View(df)
 
 
+# =====================================================================
+# HANDLE CLASS ATTRIBUTE
+# =====================================================================
+
+df$status_factor<-df$status %>% as.factor()
+df$status_numeric<-df$status_factor %>% as.numeric() # convert to numeric  (will encode classes from 1 to 8)
+df$status_numeric<-df$status_numeric-1 # substract 1 from all status codes so that we have a range 0 to 7
+table(df$status_numeric)
+
+df<-df[,-"status"] # remove status label from the original df
+df<-df[,-"status_factor"] # remove status_factor label from the original df
+View (df)
+
 
 # =====================================================================
-# TRAIN / TEST SET SPLITS
+# HANDLE CLASS IMBALANCE AND CREATE TRAIN / TEST SET SPLITS
 # =====================================================================
 
+#**
+#* A simple function to oversample a minority class by simply duplicating it's rows n times
+#*  
+copy_class_data <- function(df_train, n, class) {
+  df_class<-filter(df_train, status_numeric == class)
+  for (j in 1:n) {
+    df_train<-rbind(df_train, df_class)
+  }
+  return (df_train)
+}
 
-# TODO: balance the dataset with oversampling of the underrepresented classes
+#**
+#* A simple function to balance classes by oversampling (copying) the minority classes
+#*  
+balance_classes<-function (df_train) {
+  num_majority = sum(df_train$status == 0) # number of values of the majority class
+  for (i in 1:7) {
+    num_minority = sum(df_train$status == i) # number of values of the minority class
+    duplication_factor = round(num_majority / num_minority, digits = 0) - 1
+    df_train<-copy_class_data(df_train, n=duplication_factor, class=i)
+  }
+  
+  return (df_train)
+}
+
+
 # TODO: replace with k-fold test/train split
 
 test_split = 0.2
 train_row =  (nrow(df)-round(nrow(df)*test_split, digits = 0))
 test_row = (train_row + 1)
 
-# prepare train data as a matrix (keras does not like dataframes)
-data_train<-as.matrix(df[0:train_row,])
-data_train_label<-as.matrix(df_label[0:train_row,])
+# prepare train data, oversample minority classes, encode labels
+df_train<-df[0:train_row,]
+df_train<-balance_classes(df_train)
+table(df_train$status_numeric) # class values should be balanced now!
 
-# prepare test data as a matrix
-data_test<-as.matrix(df[test_row:nrow(df),])
-data_test_label<-as.matrix(df_label[test_row:nrow(df),])
+# one-hot encode the status labels as a matrix
+data_train_label<-to_categorical(df_train$status_numeric, num_classes=8)
+
+# remove status columns from df_train and convert to matrix
+df_train<-df_train[,-"status_numeric"]
+data_train<-as.matrix(df_train)
+
+View(data_train)
+View(data_train_label)
+
+
+# prepare the test data (on test data we do NOT handle the class imbalance!)
+df_test<-df[test_row:nrow(df),]
+
+# one-hot encode the status labels as a matrix
+data_test_label<-to_categorical(df_test$status_numeric, num_classes=8)
+
+# remove status columns from df_test and convert to matrix
+df_test<-df_test[,-"status_numeric"]
+data_test<-as.matrix(df_test)
+
+View(data_test)
+View(data_test_label)
+
+
 
 
 # =====================================================================
@@ -484,19 +489,19 @@ build_model <- function(shape_input, shape_output) {
 }
 
 
-# force deelte any lefotvers from previous runs!
+# force delete any leftovers from previous runs!
 rm(model)
 rm(metrics)
 
 # Train the model
-shape_input=ncol(df)
-shape_output=ncol(df_label)
+shape_input=50
+shape_output=8 
 model<-build_model(shape_input, shape_output)
 model %>%
   fit(
     data_train, data_train_label,
-    epochs = 1000,
-    batch_size = 128
+    epochs = 100,
+    batch_size = 64
   )
 
 # Evaluate the model
