@@ -462,7 +462,7 @@ model<-build_model(shape_input, shape_output)
 model %>%
   fit(
     data_train, data_train_label,
-    epochs = 50, # loss increases again after 391 epochs, max accuracy is reached after ~50 epochs
+    epochs = 1000, # loss increases again after 391 epochs, max accuracy is reached after ~50 epochs
     batch_size = 128
   )
 
