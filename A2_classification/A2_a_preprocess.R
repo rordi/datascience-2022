@@ -288,7 +288,7 @@ unique(df$FLAG_OWN_REALTY) # Y and N -> encode as 1 col 1/0
 unique(df$FLAG_WORK_PHONE) # 0 and 1, no further encoding needed
 unique(df$FLAG_PHONE) # 0 and 1, no further encoding needed
 unique(df$FLAG_EMAIL) # 0 and 1, no further encoding needed
-unique(df$FLAG_MOBILE) # all values are null -> drop this column
+unique(df$FLAG_MOBIL) # all values are null -> drop this column
 unique(df$NAME_INCOME_TYPE) # "Pensioner", "Commercial associate", "Working", "State servant", "Student" --> TODO possibly "Commercial associate", "Working", "State servant" can be combined
 unique(df$NAME_EDUCATION_TYPE) # "Secondary / secondary special", "Higher education", "Incomplete higher", "Lower secondary", "Academic degree" --> TODO possibly "Higher education" and "Academic degree" can be combined
 unique(df$NAME_FAMILY_STATUS) # "Married", "Separated", "Widow, "Civil marriage", "Single / not married" --> TODO combine "Married" and "Civil marriage"
@@ -308,14 +308,14 @@ df$FLAG_OWN_REALTY_Y<-ifelse(df$FLAG_OWN_REALTY=="Y", 1, 0)
 df<-df[,-"FLAG_OWN_REALTY"]
 
 # Flag mobiles: drop column, all values are equal
-df<-df[,-"FLAG_MOBILE"]
+df<-df[,-"FLAG_MOBIL"]
 
 # Other contact flags: drop to see if the model generalizes better without. The info on contact details may not be a good indicator.
 # We were not so sure about work phone, however, it seems combinations of other features (days in employment, occupation type, etc.) would
 # already capture the meaning of that feature.
-#df<-df[,-"FLAG_PHONE"]
-#df<-df[,-"FLAG_EMAIL"]
-#df<-df[,-"FLAG_WORK_PHONE"]
+df<-df[,-"FLAG_PHONE"]
+df<-df[,-"FLAG_EMAIL"]
+df<-df[,-"FLAG_WORK_PHONE"]
 
 
 # Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
@@ -504,14 +504,14 @@ rm(model)
 rm(metrics)
 
 # Train the model
-shape_input=50
+shape_input=ncol(data_train)
 shape_output=8 
 model<-build_model(shape_input, shape_output)
 history<-model %>%
   fit(
     data_train, data_train_label,
     epochs = 100,
-    batch_size = 32,
+    batch_size = 64, # TODO reduce to 32 again after hyperparam tuning
     use_multiprocessing = TRUE
   )
 
