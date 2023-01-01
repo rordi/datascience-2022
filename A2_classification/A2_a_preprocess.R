@@ -10,20 +10,21 @@
 #
 # =====================================================================
 # HINTS FROM ASSIGNMENT PAPER / HOLGER
-    # • Data preprocessing is easier here; no feature engineering is needed.
-    # • You may be able to reuse parts of the exercises we used in our examples during lectures.
-    # • All in- and output values need to be floating numbers (or integers in exceptions) in the range of [0,1].
-    # • Please note that a neural network expects a R matrix or vector, not data frames. Transform your
-    #   data (e.g. a data frame) into a matrix with data.matrix if needed.
-    # • There are some models which show an accuracy higher than 90% (!) for training (and test) data –
-    #   after learning more than 1000 epochs.
+#  • Data preprocessing is easier here; no feature engineering is needed.
+#  • You may be able to reuse parts of the exercises we used in our examples during lectures.
+#  • All in- and output values need to be floating numbers (or integers in exceptions) in the range of [0,1].
+#  • Please note that a neural network expects a R matrix or vector, not data frames. Transform your
+#    data (e.g. a data frame) into a matrix with data.matrix if needed.
+#  • There are some models which show an accuracy higher than 90% (!) for training (and test) data –
+#    after learning more than 1000 epochs.
 
 # MAIN TASK FROM ASSIGNMENT PAPER/ HOLGER
-  # • Design your network. Why did you use a feed-forward network, or a convolutional or recursive network – and why not?
-  # • Use k-fold validation (with k = 10) to find the best hyperparameters for your network.
-  # • Use the average of the accuracy to evaluate the performance of your trained network.
-  # • Find a “reasonable” good model. Argue why that model is reasonable. If you are not able to find a reasonable good model, explain what you all did to find a good model and argue why you think that’s not a good model.
-  # • Save your trained neural network with save_model_hdf5. Also save your data sets you used for training, testing and validation.
+#  • Design your network. Why did you use a feed-forward network, or a convolutional or recursive network – and why not?
+#  • Use k-fold validation (with k = 10) to find the best hyperparameters for your network.
+#  • Use the average of the accuracy to evaluate the performance of your trained network.
+#  • Find a “reasonable” good model. Argue why that model is reasonable. If you are not able to find a reasonable good model, 
+#    explain what you all did to find a good model and argue why you think that’s not a good model.
+#  • Save your trained neural network with save_model_hdf5. Also save your data sets you used for training, testing and validation.
 
 
 #ATTRIBUTE OVERVIEW 
@@ -307,7 +308,15 @@ df$FLAG_OWN_REALTY_Y<-ifelse(df$FLAG_OWN_REALTY=="Y", 1, 0)
 df<-df[,-"FLAG_OWN_REALTY"]
 
 # Flag mobiles: drop column, all values are equal
-df<-df[,-"FLAG_MOBIL"]
+df<-df[,-"FLAG_MOBILE"]
+
+# Other contact flags: drop to see if the model generalizes better without. The info on contact details may not be a good indicator.
+# We were not so sure about work phone, however, it seems combinations of other features (days in employment, occupation type, etc.) would
+# already capture the meaning of that feature.
+#df<-df[,-"FLAG_PHONE"]
+#df<-df[,-"FLAG_EMAIL"]
+#df<-df[,-"FLAG_WORK_PHONE"]
+
 
 # Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "None")
@@ -509,8 +518,8 @@ history<-model %>%
 # Evaluate the trained model
 plot(history)
 #lastlayer = length(model$layers) - 1
-#weight<- as.matrix(model$layers[[lastlayer]]$weights[[1]])
-#bias<- as.matrix(model$layers[[lastlayer]]$weights[[2]])
+#weight<-as.matrix(model$layers[[lastlayer]]$weights[[1]])
+#bias<-as.matrix(model$layers[[lastlayer]]$weights[[2]])
 
 # Evaluate the model on test data
 metrics<-model %>% evaluate(data_test, data_test_label)
