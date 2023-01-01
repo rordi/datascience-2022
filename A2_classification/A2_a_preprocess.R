@@ -111,47 +111,56 @@ rm(list=ls())
 # allow for reproducible results
 set.seed(1)
 
+# Disable GPU                                                                   
+Sys.setenv("CUDA_VISIBLE_DEVICES" = -1)
+
 # set memory limit: this works only on Windows (you can copy-paste the below commented-out command into console and run it there)
 # memory.limit(700000)
 
+# For Apple M1 & M2 users with latest Apple GPUs
+install_arm64<-function () {
+  install.packages("tensorflow")
+  library(reticulate)
+  
+  # replace the file path to your Anaconda python installation accordingly
+  virtualenv_create("r-reticulate", python = "/Users/my_user/opt/anaconda3/bin/python")
+  install_tensorflow(envname = "r-reticulate")
+  install.packages("keras")
+  library(keras)
+  install_keras(envname = "r-reticulate")
+ 
+  print("NOW PLEASE FOLLOW STEPS IN https://gist.github.com/rordi/9970c8840614644e01a53d68e51f37fd to pip uninstall tensorflow-metal !!")
+}
 
-# Apple M1 & M2 users --> please install according to https://gist.github.com/rordi/9970c8840614644e01a53d68e51f37fd
-#
-# Other users (Windows, older Intel-based Macs), please copy-paste the following commands to the RStudio console manually:
-# 
-# install.packages("tensorflow")
-# library(reticulate)
-# library(tensorflow)
-# install_tensorflow()
-# install.packages("keras")
-# library(keras)
-# install_keras()
+# For all other users
+install_amd64<-function () {
+  install.packages("tensorflow")
+  library(reticulate)
+  library(tensorflow)
+  install_tensorflow()
+  install.packages("keras")
+  library(keras)
+  install_keras()
+}
 
+# manually run install_arm64() or install_amd64() in the R console depending on your system architecture
 
-# --> This r-reticulate Keras call installs tensorflow-metal again, which I have to remove manually again!! It is not compatible with Apple's GPU chips.
-# --> open terminal (iterm)
-# --> check the python / conda envs availalbe:
-#       conda info --envs
-# --> activate the conda env for r-reticulate, for me this was:
-#       source /Users/didi/Library/r-miniconda-arm64/bin/activate
-# --> then still in iterm uninstall the tensorflow-metal again (be sure to use the same coda env python distro):
-#       /Users/didi/Library/r-miniconda-arm64/envs/r-reticulate/bin/python -m pip uninstall tensorflow-metal
+# install other package dependencies
+install_packages_classification<-function() {
+  install.packages("Sequential")
+  install.packages("caret")
+  install.packages("readr")
+  install.packages("dplyr")
+  install.packages("fastDummies")
+  install.packages("corrplot")
+  install.packages("data.table")
+  install.packages("tidyr")
+}
+#install_packages_classification() # uncomment when running first time!
 
 # confirm installation 
 library(tensorflow)
 tf$constant("Hello Tensorflow!")
-
-
-# install other package dependencies
-install.packages("Sequential")
-install.packages("caret")
-install.packages("readr")
-install.packages("dplyr")
-install.packages("fastDummies")
-install.packages("corrplot")
-install.packages("data.table")
-install.packages("tidyr")
-
 
 library(Sequential)
 library(ggplot2)
