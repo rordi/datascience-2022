@@ -426,8 +426,10 @@ copy_class_data <- function(df_train, n, class) {
   return (df_train)
 }
 
+
 #**
-#* A simple function to balance classes by oversampling (copying) the minority classes
+#* A simple function to balance classes by oversampling (copying) the minority classes recursively
+#* using copy_class_data() function defined above
 #*  
 balance_classes<-function (df_train) {
   num_majority = sum(df_train$status == 0) # number of values of the majority class
@@ -438,6 +440,17 @@ balance_classes<-function (df_train) {
   }
   
   return (df_train)
+}
+
+#**
+#* A simple function to encode the status labels in columns from 0 to 7 instead of simple one-hot encoding
+#* 
+encode_status<-function (df) {
+  encoded<-to_categorical(df$status_numeric, num_classes=8)
+  #for (n in 1:8) {
+  #  encoded[,n]<-n*(encoded[,n]) 
+  #}
+  return (encoded)
 }
 
 
