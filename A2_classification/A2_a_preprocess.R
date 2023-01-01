@@ -463,8 +463,8 @@ build_model <- function(shape_input, shape_output) {
     learning_rate = 1e-4, # use "lr" in older releases of tensorflow !
     #lr = 1e-4,
     momentum = 0.9,
-    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
-    #decay = 1e-6,
+    weight_decay = 1e-5, # use "decay" in older releases of tensorflow !
+    #decay = 1e-5,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
@@ -476,7 +476,8 @@ build_model <- function(shape_input, shape_output) {
   model <- keras_model_sequential() 
   model %>% 
     layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%   # first layer, n = input shape
-    layer_dense(units = hidden_layer, activation = "relu") %>%                                  # hidden laser, n ca. mean of input and outpu shapre (rule of thumb)
+    layer_dense(units = 10, activation = "relu") %>%                                           # add a hidden layer with few neurons to encode the sparse features ("bottleneck" encoding layer); inspired by: https://www.jeremyjordan.me/autoencoders/
+    layer_dense(units = hidden_layer, activation = "relu") %>%                                  # hidden layer, n ca. mean of input and output shape (rule of thumb) (decoding layer)
     layer_dense(units = shape_output, activation = "softmax")                                    # last hidden layer, n = number of classes, with softmax activation
 
   summary(model)
@@ -497,15 +498,34 @@ rm(metrics)
 shape_input=50
 shape_output=8 
 model<-build_model(shape_input, shape_output)
-model %>%
+history<-model %>%
   fit(
     data_train, data_train_label,
     epochs = 100,
-    batch_size = 64
+    batch_size = 16, # batch sizing of 128 and 64 gave poor results, trying with 32
+    use_multiprocessing = TRUE
   )
 
-# Evaluate the model
+# Evaluate the trained model
+plot(history)
+#lastlayer = length(model$layers) - 1
+#weight<- as.matrix(model$layers[[lastlayer]]$weights[[1]])
+#bias<- as.matrix(model$layers[[lastlayer]]$weights[[2]])
+
+# Evaluate the model on test data
 metrics<-model %>% evaluate(data_test, data_test_label)
 metrics
+
+# Observations from metrics:
+#
+# - activation function: relu on input and hidden layers gave better results than sigmoid (last layer always softmax as we have a multi-valued class prediction)
+# - smaller batch sizes gave better results, we tried 128, 64, 32 and 16. With 16 the training was really becoming slow and difficult to run the model with
+#   different params as part of hyperparams tuning. Also difference of accuracy in test data was not big for 16 versus 32, so we decided that 32 is a good number.
+# - SGD optimizer:
+#    - learning rate of 0.01 was too big, reduced to initial value of 1e-4
+#    - weight decay: added some decay to avoid overfitting to training data (generalize the model better); we tried with 1e-5 and 1e-4, the smaller one was slightly better
+#
+#
+
 
 
