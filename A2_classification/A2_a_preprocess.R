@@ -174,8 +174,6 @@ library(data.table)
 library(tidyr)
 
 
-
-
 # =====================================================================
 # LOAD DATA INTO DATAFRAME
 # =====================================================================
@@ -196,7 +194,7 @@ df[sample(1:nrow(df)), ]
 dim(df)    # we have 19 variables and ~67.6K observations (really few observations for training a NN! -> we should use cross-validation with 10% test splits)
 str(df)
 glimpse(df)
-View(df)
+#View(df)
 
 # Initial Observations:
 # 
@@ -274,7 +272,7 @@ apply_threshold <- function(feature, threshold = 1) {
 
 #**
 #* Function for min max scaling (standardization) of a feature
-#* e.g. when applying this function, the values in the collumn will be scaled to 0-1 range
+#* e.g. when applying this function, the values in the column will be scaled to 0-1 range
 #* 
 min_max_normalize <- function(x) {
   # then we apply min-max normalization so that values are between 0 and 1
@@ -319,14 +317,8 @@ df<-df[,-"FLAG_OWN_REALTY"]
 # Flag mobiles: drop column --> all values are equal 1
 df<-df[,-"FLAG_MOBIL"]
 
-# merge alternate phones into one feature to see if it generalizes better
-for(i in 1:nrow(df)){
-  if(df$FLAG_PHONE[i] == 1 || df$FLAG_WORK_PHONE[i] == 1) { 
-    df$FLAG_HAS_PHONE[i]<-1
-  } else {
-    df$FLAG_HAS_PHONE[i]<-0
-  }
-}
+# Other contact type flags: also remove, may not be good predictors
+df<-df[,-"FLAG_EMAIL"]
 df<-df[,-"FLAG_PHONE"]
 df<-df[,-"FLAG_WORK_PHONE"]
 
@@ -364,9 +356,6 @@ df <- dummy_cols(df, select_columns = c(
   "OCCUPATION_TYPE"
 ), remove_first_dummy = FALSE, remove_selected_columns = TRUE)
 
-# take a loot at the modified dataframe
-View(df)
-
 # Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
 describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount") # huge outliers, we apply a threshold of 1.5 * IQR: Q3 + 1.5 * (Q3 - Q1) = 225K + 1.5 * (225K - 112.5K) = 393.75K
 df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 393750)
@@ -403,7 +392,6 @@ cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we 
 # drop the CNT_CHILDREN because is heavily correlated / redundant with CNT_FAM_MEMBERS
 df<-df[,-"CNT_CHILDREN"]
 
-
 # we are done with the data preparation for the input variables - show a summary of the prepared df
 summary(df)
 View(df)
@@ -420,7 +408,7 @@ table(df$status_numeric)
 
 df<-df[,-"status"] # remove status label from the original df
 df<-df[,-"status_factor"] # remove status_factor label from the original df
-View (df)
+#View (df)
 
 
 # =====================================================================
