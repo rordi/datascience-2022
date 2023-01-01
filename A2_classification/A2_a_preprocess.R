@@ -307,19 +307,38 @@ df<-df[,-"FLAG_OWN_CAR"]
 df$FLAG_OWN_REALTY_Y<-ifelse(df$FLAG_OWN_REALTY=="Y", 1, 0)
 df<-df[,-"FLAG_OWN_REALTY"]
 
-# Flag mobiles: drop column, all values are equal
+# Flag mobiles: drop column --> all values are equal 1
 df<-df[,-"FLAG_MOBIL"]
 
-# Other contact flags: drop to see if the model generalizes better without. The info on contact details may not be a good indicator.
-# We were not so sure about work phone, however, it seems combinations of other features (days in employment, occupation type, etc.) would
-# already capture the meaning of that feature.
+# merge alternate phones into one feature to see if it generalizes better
+df$FLAG_PHONE<-ifelse(df$FLAG_PHONE || df$FLAG_WORK_PHONE, 1, 0)
 df<-df[,-"FLAG_PHONE"]
-df<-df[,-"FLAG_EMAIL"]
 df<-df[,-"FLAG_WORK_PHONE"]
-
 
 # Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "None")
+
+
+# Name Income Type: try to generalize the model better by reducing sparsity of some of the categorical values
+df$NAME_INCOME_TYPE<-replace(df$NAME_INCOME_TYPE, df$NAME_INCOME_TYPE == "Student", "Not working") # only 4 values, we combine Student + Pensioner into "Non working"
+df$NAME_INCOME_TYPE<-replace(df$NAME_INCOME_TYPE, df$NAME_INCOME_TYPE == "Pensioner", "Not working")
+table(df$NAME_INCOME_TYPE)
+
+# Name Education Type: try to generalize the model better by reducing sparsity of some of the categorical values
+df$NAME_EDUCATION_TYPE<-replace(df$NAME_EDUCATION_TYPE, df$NAME_EDUCATION_TYPE == "Academic degree", "Higher education") # only 38 values, we combine Academic degree with Higher education
+df$NAME_EDUCATION_TYPE<-replace(df$NAME_EDUCATION_TYPE, df$NAME_EDUCATION_TYPE == "Lower secondary", "Secondary") # only 716, combine with other secondary type
+df$NAME_EDUCATION_TYPE<-replace(df$NAME_EDUCATION_TYPE, df$NAME_EDUCATION_TYPE == "Secondary / secondary special", "Secondary")
+table(df$NAME_EDUCATION_TYPE)
+
+# Name Family Status: try to generalize the model better by reducing sparsity of some of the categorical values
+df$NAME_FAMILY_STATUS<-replace(df$NAME_FAMILY_STATUS, df$NAME_FAMILY_STATUS == "Civil marriage", "Married") # combine "Civil marriage" into "Married", what's the difference?
+table(df$NAME_FAMILY_STATUS)
+
+# Name Housing Type: try to generalize the model better by reducing sparsity of some of the categorical values
+df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Office apartment", "Rented apartment") # combine all the apartment types
+df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Co-op apartment", "Rented apartment")
+df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Municipal apartment", "Rented apartment")
+table(df$NAME_HOUSING_TYPE) 
 
 # All other catgorical features are muti-class (>2 classes) and need special one-hot encoding into one col per unique class value
 df <- dummy_cols(df, select_columns = c(
@@ -485,9 +504,9 @@ build_model <- function(shape_input, shape_output) {
   model <- keras_model_sequential() 
   model %>% 
     layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%   # first layer, n = input shape
-    layer_dense(units = 10, activation = "relu") %>%                                           # add a hidden layer with few neurons to encode the sparse features ("bottleneck" encoding layer); inspired by: https://www.jeremyjordan.me/autoencoders/
-    layer_dense(units = hidden_layer, activation = "relu") %>%                                  # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
-    layer_dense(units = shape_output, activation = "softmax")                                    # last hidden layer, n = number of classes, with softmax activation
+    # layer_dense(units = 15, activation = "relu") %>%                                           # add a hidden layer with few neurons to encode the sparse features ("bottleneck" encoding layer); inspired by: https://www.jeremyjordan.me/autoencoders/
+    layer_dense(units = hidden_layer, activation = "relu") %>%                              # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
+    layer_dense(units = shape_output, activation = "softmax")                                  # last hidden layer, n = number of classes, with softmax activation
 
   summary(model)
     
@@ -511,8 +530,7 @@ history<-model %>%
   fit(
     data_train, data_train_label,
     epochs = 100,
-    batch_size = 64, # TODO reduce to 32 again after hyperparam tuning
-    use_multiprocessing = TRUE
+    batch_size = 64 # TODO reduce to 32 again after hyperparam tuning
   )
 
 # Evaluate the trained model
