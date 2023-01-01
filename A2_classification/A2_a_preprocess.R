@@ -311,7 +311,13 @@ df<-df[,-"FLAG_OWN_REALTY"]
 df<-df[,-"FLAG_MOBIL"]
 
 # merge alternate phones into one feature to see if it generalizes better
-df$FLAG_PHONE<-ifelse(df$FLAG_PHONE || df$FLAG_WORK_PHONE, 1, 0)
+for(i in 1:nrow(df)){
+  if(df$FLAG_PHONE[i] == 1 || df$FLAG_WORK_PHONE[i] == 1) { 
+    df$FLAG_HAS_PHONE[i]<-1
+  } else {
+    df$FLAG_HAS_PHONE[i]<-0
+  }
+}
 df<-df[,-"FLAG_PHONE"]
 df<-df[,-"FLAG_WORK_PHONE"]
 
