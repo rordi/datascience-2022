@@ -477,7 +477,7 @@ build_model <- function(shape_input, shape_output) {
   model %>% 
     layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%   # first layer, n = input shape
     layer_dense(units = 10, activation = "relu") %>%                                           # add a hidden layer with few neurons to encode the sparse features ("bottleneck" encoding layer); inspired by: https://www.jeremyjordan.me/autoencoders/
-    layer_dense(units = hidden_layer, activation = "relu") %>%                                  # hidden layer, n ca. mean of input and output shape (rule of thumb) (decoding layer)
+    layer_dense(units = hidden_layer, activation = "relu") %>%                                  # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
     layer_dense(units = shape_output, activation = "softmax")                                    # last hidden layer, n = number of classes, with softmax activation
 
   summary(model)
@@ -502,7 +502,7 @@ history<-model %>%
   fit(
     data_train, data_train_label,
     epochs = 100,
-    batch_size = 16, # batch sizing of 128 and 64 gave poor results, trying with 32
+    batch_size = 32,
     use_multiprocessing = TRUE
   )
 
