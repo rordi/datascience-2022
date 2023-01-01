@@ -488,23 +488,25 @@ build_model <- function(shape_input, shape_output) {
   # Prepare the gradient descent optimizer (Marco may have an older version of
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   SGD <- optimizer_sgd(
-    learning_rate = 1e-4, # use "lr" in older releases of tensorflow !
+    learning_rate = 1e-3, # use "lr" in older releases of tensorflow !
     #lr = 1e-4,
     momentum = 0.9,
-    weight_decay = 1e-5, # use "decay" in older releases of tensorflow !
+    weight_decay = 1e-3, # use "decay" in older releases of tensorflow !
     #decay = 1e-5,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
+  
+  # TODO - try adam optimizer
 
   # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
-  hidden_layer = round((shape_input+shape_output)/2, digits = 0)
+  hidden_layer = round((shape_input+shape_output)*(2/3), digits = 0)
 
   # Build the Keras network model
   model <- keras_model_sequential() 
   model %>% 
     layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%   # first layer, n = input shape
-    # layer_dense(units = 15, activation = "relu") %>%                                           # add a hidden layer with few neurons to encode the sparse features ("bottleneck" encoding layer); inspired by: https://www.jeremyjordan.me/autoencoders/
+    layer_dense(units = 200, activation = "relu") %>%                              # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
     layer_dense(units = hidden_layer, activation = "relu") %>%                              # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
     layer_dense(units = shape_output, activation = "softmax")                                  # last hidden layer, n = number of classes, with softmax activation
 
@@ -529,8 +531,8 @@ model<-build_model(shape_input, shape_output)
 history<-model %>%
   fit(
     data_train, data_train_label,
-    epochs = 100,
-    batch_size = 64 # TODO reduce to 32 again after hyperparam tuning
+    epochs = 50,
+    batch_size = 32
   )
 
 # Evaluate the trained model
