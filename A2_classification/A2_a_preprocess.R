@@ -465,8 +465,8 @@ df_train<-df[0:train_row,]
 df_train<-balance_classes(df_train)
 table(df_train$status_numeric) # class values should be balanced now!
 
-# one-hot encode the status labels as a matrix
-data_train_label<-to_categorical(df_train$status_numeric, num_classes=8)
+# encode the status labels as a matrix
+data_train_label<-encode_status(df_train)
 
 # remove status columns from df_train and convert to matrix
 df_train<-df_train[,-"status_numeric"]
@@ -480,7 +480,7 @@ View(data_train_label)
 df_test<-df[test_row:nrow(df),]
 
 # one-hot encode the status labels as a matrix
-data_test_label<-to_categorical(df_test$status_numeric, num_classes=8)
+data_test_label<-encode_status(df_test)
 
 # remove status columns from df_test and convert to matrix
 df_test<-df_test[,-"status_numeric"]
@@ -497,58 +497,89 @@ View(data_test_label)
 # =====================================================================
 
 #**
-#* function that builds our model (so that we can call it several times)
+#* function that builds our SGD optimizer
 #* 
-build_model <- function(shape_input, shape_output) {
-  
-  # Prepare the gradient descent optimizer (Marco may have an older version of
+build_optimizer_sgd<-function () {
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
-  SGD <- optimizer_sgd(
-    learning_rate = 1e-3, # use "lr" in older releases of tensorflow !
-    #lr = 1e-4,
+  sgd<-optimizer_sgd(
+    learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
+    #lr = 1e-6,
     momentum = 0.9,
-    weight_decay = 1e-3, # use "decay" in older releases of tensorflow !
-    #decay = 1e-5,
+    weight_decay = 0, # use "decay" in older releases of tensorflow !
+    #decay = 0,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
-  
-  # TODO - try adam optimizer
+  return (sgd)
+}
 
+
+#**
+#* function that builds our ADAM optimizer
+#* 
+build_optimizer_adam<-function () {
+  adam<-optimizer_adam( 
+    learning_rate = 5e-5, # use "lr" in older releases of tensorflow !
+    #lr = 1e-4,
+    beta_1 = 0.9,
+    beta_2 = 0.999,
+    weight_decay = 0, # use "decay" in older releases of tensorflow !
+    #decay = 0
+  )
+  return (adam)
+}
+
+
+#**
+#* function that builds our model (so that we can call it several times)
+#* 
+build_model <- function(shape_input, shape_output) {
   # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
-  hidden_layer = round((shape_input+shape_output)*(2/3), digits = 0)
+  # hidden_layer = round((shape_input+shape_output)*(3/4), digits = 0)
+  hidden_layer = shape_input + shape_output
 
   # Build the Keras network model
-  model <- keras_model_sequential() 
+  model<-keras_model_sequential() 
   model %>% 
-    layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%   # first layer, n = input shape
-    layer_dense(units = 200, activation = "relu") %>%                              # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
-    layer_dense(units = hidden_layer, activation = "relu") %>%                              # hidden layer, n ca. mean of input and output shape as a rule of thumb (decoding layer)
-    layer_dense(units = shape_output, activation = "softmax")                                  # last hidden layer, n = number of classes, with softmax activation
+    layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%
+    layer_dense(units = hidden_layer, activation = "relu") %>% # L2
+    layer_dense(units = hidden_layer, activation = "relu") %>% # L3
+    layer_dense(units = hidden_layer, activation = "relu") %>% # L4
+    layer_dense(units = round(hidden_layer/2, digits = 0), activation = "relu") %>% # L5
+    layer_dense(units = shape_output, activation = "softmax")
 
   summary(model)
-    
-  model %>% compile(
-    optimizer = SGD, # "rmsprop" or SDG
-    loss = "categorical_crossentropy", 
-    metrics = c("accuracy")
-  )
+  
+  return (model)
 }
 
 
 # force delete any leftovers from previous runs!
 rm(model)
+rm(optimizer)
 rm(metrics)
 
-# Train the model
+# Build the model and optimizer
 shape_input=ncol(data_train)
 shape_output=8 
 model<-build_model(shape_input, shape_output)
+optimizer<-build_optimizer_adam()
+
+
+# Compile the model
+model<-model %>%
+  compile(
+    optimizer=optimizer,
+    loss="categorical_crossentropy", 
+    metrics=c("accuracy")
+  )
+
+# Train the model
 history<-model %>%
   fit(
     data_train, data_train_label,
-    epochs = 50,
-    batch_size = 32
+    epochs = 500,
+    batch_size = 128 # TODO decrese to 32 after param tuning for adam optimizer
   )
 
 # Evaluate the trained model
