@@ -275,8 +275,11 @@ apply_threshold <- function(feature, threshold = 1) {
 #* e.g. when applying this function, the values in the column will be centered and scaled to 0-1 range
 #* 
 min_max_normalize <- function(x) {
-  # scale
-  x<-scale(x, center = TRUE, scale = FALSE)
+  # first scale using 2 standard deviations around mean
+  m = mean(x)
+  s = 2 * sd(x)
+  x<-scale(x, center = m, scale = s)
+  
   # then we apply min-max normalization so that values are between 0 and 1
   return ((x-min(x))/(max(x)-min(x)))
 }
@@ -317,7 +320,7 @@ df$FLAG_OWN_REALTY_Y<-ifelse(df$FLAG_OWN_REALTY=="Y", 1, 0)
 df<-df[,-"FLAG_OWN_REALTY"]
 
 # Flag mobiles: drop column --> all values are equal 1
-#df<-df[,-"FLAG_MOBIL"]
+df<-df[,-"FLAG_MOBIL"]
 
 # Other contact type flags: also remove, may not be good predictors
 #df<-df[,-"FLAG_EMAIL"]
@@ -399,9 +402,9 @@ df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 
 # Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
 # indicates missing data. We will thus apply a threshold of 0 before normalizing the feature (scale to 0-1).
-describe_feature(df$DAYS_EMPLOYED, "Days employmed")
+describe_feature(df$DAYS_EMPLOYED, "Days employed")
 df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
-describe_feature(df$DAYS_EMPLOYED, "Days employmed") # looks more like a powerlaw distribution now
+describe_feature(df$DAYS_EMPLOYED, "Days employed") # looks more like a powerlaw distribution now
 df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED)
 
 # Children count: normalize the feature
@@ -461,7 +464,7 @@ oversample_classes<-function (df_train) {
   num_majority<-sum(df_train$status_numeric == 0) # number of values of the majority class
   for (i in 1:7) {
     num_minority<-sum(df_train$status_numeric == i) # number of values of the minority class
-    duplication_factor<-ceiling(20000 / num_minority) - 1  # oversample so that we have at least 20K for each class
+    duplication_factor<-ceiling(24000 / num_minority) - 1  # oversample so that we have at least 20K for each class
     if (duplication_factor > 1) {
       df_train<-copy_class_data(df_train, n = duplication_factor, class=i)  
     }
@@ -548,12 +551,12 @@ build_optimizer_sgd<-function () {
 #* 
 build_optimizer_adam<-function () {
   adam<-optimizer_adam( 
-    learning_rate = 1e-3, # use "lr" in older releases of tensorflow !
-    #lr = 1e-3,
+    learning_rate = 3e-4, # use "lr" in older releases of tensorflow !
+    #lr = 3e-4,
     beta_1 = 0.9,
     beta_2 = 0.999,
     weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
-    #decay = 0
+    #decay = 1e-6
   )
   return (adam)
 }
@@ -566,7 +569,7 @@ build_model <- function(shape_input, shape_output) {
   # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
   # hidden_layer = round((shape_input+shape_output)*(3/4), digits = 0)
   #neurons<-round((shape_input + shape_output)*(2/3), digits = 0)
-  neurons<-200
+  neurons<-220
 
   # Build the Keras network model
   model<-keras_model_sequential() 
@@ -613,8 +616,9 @@ model<-model %>%
 history<-model %>%
   fit(
     data_train, data_train_label,
-    epochs = 2000,
-    batch_size = 16
+    epochs = 40,
+    batch_size = 16,
+    validation_data=list(data_test, data_test_label)
   )
 
 # Evaluate the trained model
