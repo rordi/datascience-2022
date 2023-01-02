@@ -317,49 +317,50 @@ df$FLAG_OWN_REALTY_Y<-ifelse(df$FLAG_OWN_REALTY=="Y", 1, 0)
 df<-df[,-"FLAG_OWN_REALTY"]
 
 # Flag mobiles: drop column --> all values are equal 1
-df<-df[,-"FLAG_MOBIL"]
+#df<-df[,-"FLAG_MOBIL"]
 
 # Other contact type flags: also remove, may not be good predictors
-df<-df[,-"FLAG_EMAIL"]
-df<-df[,-"FLAG_PHONE"]
-df<-df[,-"FLAG_WORK_PHONE"]
+#df<-df[,-"FLAG_EMAIL"]
+#df<-df[,-"FLAG_PHONE"]
+#df<-df[,-"FLAG_WORK_PHONE"]
 
 # Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "None")
-df$FLAG_SKILLED<-df$OCCUPATION_TYPE
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Accountants", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cleaning staff", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cooking staff", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Core staff", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Drivers", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "High skill tech staff", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "HR staff", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "IT staff", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Laborers", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Low-skill Laborers", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Managers", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Medicine staff", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "None", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Private service staff", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Realty agents", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Sales staff", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Secretaries", 1)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Security staff", 0)
-df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Waiters/barmen staff", 0)
-df$FLAG_SKILLED<-df$FLAG_SKILLED %>% as.numeric()
-df<-df[,-"OCCUPATION_TYPE"]
-table(df$FLAG_SKILLED)
+#df$FLAG_SKILLED<-df$OCCUPATION_TYPE
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Accountants", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cleaning staff", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cooking staff", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Core staff", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Drivers", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "High skill tech staff", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "HR staff", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "IT staff", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Laborers", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Low-skill Laborers", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Managers", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Medicine staff", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "None", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Private service staff", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Realty agents", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Sales staff", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Secretaries", 1)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Security staff", 0)
+#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Waiters/barmen staff", 0)
+#df$FLAG_SKILLED<-df$FLAG_SKILLED %>% as.numeric()
+#table(df$FLAG_SKILLED)
+#df<-df[,-"OCCUPATION_TYPE"]
+
 
 # Name Income Type: try to generalize the model better by reducing sparsity of some of the categorical values by creating new FLAG_WORKING = 0/1
-df$FLAG_WORKING<-df$NAME_INCOME_TYPE
-df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Student", 0)
-df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Commercial associate", 1)
-df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Working", 1)
-df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "State servant", 1)
-df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Pensioner", 0)
-df$FLAG_WORKING<-df$FLAG_WORKING %>% as.numeric()
-df<-df[,-"NAME_INCOME_TYPE"]
-table(df$FLAG_WORKING)
+#df$FLAG_WORKING<-df$NAME_INCOME_TYPE
+#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Student", 0)
+#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Commercial associate", 1)
+#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Working", 1)
+#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "State servant", 1)
+#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Pensioner", 0)
+#df$FLAG_WORKING<-df$FLAG_WORKING %>% as.numeric()
+#table(df$FLAG_WORKING)
+#df<-df[,-"NAME_INCOME_TYPE"]
 
 # Name Education Type: try to generalize the model better by reducing sparsity of some of the categorical values
 df$NAME_EDUCATION_TYPE<-replace(df$NAME_EDUCATION_TYPE, df$NAME_EDUCATION_TYPE == "Academic degree", "Higher education") # only 38 values, we combine Academic degree with Higher education
@@ -372,17 +373,18 @@ df$NAME_FAMILY_STATUS<-replace(df$NAME_FAMILY_STATUS, df$NAME_FAMILY_STATUS == "
 table(df$NAME_FAMILY_STATUS)
 
 # Name Housing Type: try to generalize the model better by reducing sparsity of some of the categorical values
-df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Office apartment", "Rented apartment") # combine all the apartment types
-df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Co-op apartment", "Rented apartment")
-df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Municipal apartment", "Rented apartment")
-table(df$NAME_HOUSING_TYPE) 
+#table(df$FLAG_WORKING)df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Office apartment", "Rented apartment") # combine all the apartment types
+#table(df$FLAG_WORKING)df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Co-op apartment", "Rented apartment")
+#table(df$FLAG_WORKING)df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Municipal apartment", "Rented apartment")
+#table(df$FLAG_WORKING)table(df$NAME_HOUSING_TYPE) 
 
 # All other catgorical features are muti-class (>2 classes) and need special one-hot encoding into one col per unique class value
 df <- dummy_cols(df, select_columns = c(
   "NAME_INCOME_TYPE",
   "NAME_EDUCATION_TYPE",
   "NAME_FAMILY_STATUS",
-  "NAME_HOUSING_TYPE"
+  "NAME_HOUSING_TYPE",
+  "OCCUPATION_TYPE"
 ), remove_first_dummy = FALSE, remove_selected_columns = TRUE)
 
 # Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
@@ -411,10 +413,10 @@ describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
 df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS)
 
 # check correlations between family and children count
-cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we keep only the family members count
+#cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we keep only the family members count
 
 # drop the CNT_CHILDREN because is heavily correlated / redundant with CNT_FAM_MEMBERS
-df<-df[,-"CNT_CHILDREN"]
+#df<-df[,-"CNT_CHILDREN"]
 
 # we are done with the data preparation for the input variables - show a summary of the prepared df
 summary(df)
@@ -459,7 +461,7 @@ oversample_classes<-function (df_train) {
   num_majority<-sum(df_train$status_numeric == 0) # number of values of the majority class
   for (i in 1:7) {
     num_minority<-sum(df_train$status_numeric == i) # number of values of the minority class
-    duplication_factor<-ceiling(12000 / num_minority) - 1  # oversample so that we have at least 10K for each class
+    duplication_factor<-ceiling(20000 / num_minority) - 1  # oversample so that we have at least 20K for each class
     if (duplication_factor > 1) {
       df_train<-copy_class_data(df_train, n = duplication_factor, class=i)  
     }
@@ -564,7 +566,7 @@ build_model <- function(shape_input, shape_output) {
   # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
   # hidden_layer = round((shape_input+shape_output)*(3/4), digits = 0)
   #neurons<-round((shape_input + shape_output)*(2/3), digits = 0)
-  neurons<-100
+  neurons<-200
 
   # Build the Keras network model
   model<-keras_model_sequential() 
@@ -573,7 +575,12 @@ build_model <- function(shape_input, shape_output) {
     layer_dense(units = neurons, activation = "relu") %>% # L2
     layer_dense(units = neurons, activation = "relu") %>% # L3
     layer_dense(units = neurons, activation = "relu") %>% # L4
-    layer_dense(units = neurons, activation = "relu") %>% # L4
+    layer_dense(units = neurons, activation = "relu") %>% # L5
+    layer_dense(units = neurons, activation = "relu") %>% # L6
+    layer_dense(units = neurons, activation = "relu") %>% # L7
+    layer_dense(units = neurons, activation = "relu") %>% # L8
+    layer_dense(units = neurons, activation = "relu") %>% # L9
+    layer_dense(units = neurons, activation = "relu") %>% # L10
     layer_dense(units = shape_output, activation = "softmax")
 
   summary(model)
