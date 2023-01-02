@@ -160,6 +160,8 @@ install_packages_classification<-function() {
 
 # confirm installation 
 library(tensorflow)
+library(keras)                                                                  
+use_backend("tensorflow")
 tf$constant("Hello Tensorflow!")
 
 library(Sequential)
@@ -489,8 +491,6 @@ View(data_test)
 View(data_test_label)
 
 
-
-
 # =====================================================================
 # NEURAL NETWORK DESIGN AND FIT
 # =====================================================================
@@ -518,11 +518,11 @@ build_optimizer_sgd<-function () {
 #* 
 build_optimizer_adam<-function () {
   adam<-optimizer_adam( 
-    learning_rate = 5e-5, # use "lr" in older releases of tensorflow !
+    lr = 1e-3, # use "lr" in older releases of tensorflow !
     #lr = 1e-4,
     beta_1 = 0.9,
     beta_2 = 0.999,
-    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    decay = 0, # use "decay" in older releases of tensorflow !
     #decay = 1e-6
   )
   return (adam)
@@ -532,27 +532,18 @@ build_optimizer_adam<-function () {
 #**
 #* function that builds our model (so that we can call it several times)
 #* 
-build_model <- function(shape_input, shape_output) {
-  # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
-  # hidden_layer = round((shape_input+shape_output)*(3/4), digits = 0)
-  #neurons<-round((shape_input + shape_output)*(2/3), digits = 0)
-  neurons<-100
-
-  # Build the Keras network model
+build_model <- function() {
+  shape_input<-c(ncol(data_train))
+  shape_output<-8
+  
+  neurons<-600
+  dropout<-0.06
+  
   model<-keras_model_sequential() 
   model %>% 
-    layer_dense(units = 10*neurons, activation = "relu", input_shape = c(shape_input)) %>% # L1
-    layer_dropout(rate=0.10) %>%
-    layer_dense(units = 10*neurons, activation = "relu") %>% # L2
-    layer_dropout(rate=0.10) %>%
-    layer_dense(units = 10*neurons, activation = "relu") %>% # L3
-    layer_dropout(rate=0.10) %>%
-    layer_dense(units = 10*neurons, activation = "relu") %>% # L4
-    layer_dropout(rate=0.10) %>%
-    layer_dense(units = 8*neurons, activation = "relu") %>% # L5
-    layer_dense(units = 6*neurons, activation = "relu") %>% # L6
-    layer_dense(units = 4*neurons, activation = "relu") %>% # L7
-    layer_dense(units = 2*neurons, activation = "relu") %>% # L8
+    layer_conv_1d(filters=64, kernel_size=2, input_shape=shape_input, activation="relu") %>%
+    layer_max_pooling_1d() %>%
+    layer_flatten() %>%
     layer_dense(units = shape_output, activation = "softmax") # Output layer
 
   summary(model)
@@ -561,16 +552,42 @@ build_model <- function(shape_input, shape_output) {
 }
 
 
+#**
+#* function that builds a 1D CNN model (so that we can call it several times)
+#* 
+build_model_1d <- function() {
+  shape_input<-c(ncol(data_train_1d), 1)
+  shape_output<-8
+  
+  model = keras_model_sequential() %>%
+    layer_conv_1d(filters=64, kernel_size=6, input_shape=shape_input, activation="relu") %>%
+    layer_max_pooling_1d() %>%
+    layer_conv_1d(filters=48, kernel_size=2, activation="relu") %>%
+    layer_max_pooling_1d() %>%
+    layer_flatten() %>%
+    layer_dense(units = 480, activation = "relu") %>%
+    layer_dense(units = 480, activation = "relu") %>%
+    layer_dense(units = shape_output, activation = "softmax") # Output layer
+  
+  summary(model)
+  
+  return (model)
+}
+
 # force delete any leftovers from previous runs!
 rm(model)
 rm(optimizer)
 rm(metrics)
 gc()
 
+
+# prepare data for 1d CNN
+data_train_1d = array(data_train, dim = c(nrow(data_train), ncol(data_train), 1))
+data_test_1d = array(data_test, dim = c(nrow(data_test), ncol(data_test), 1))
+
 # Build the model and optimizer
-shape_input=ncol(data_train)
-shape_output=8 
-model<-build_model(shape_input, shape_output)
+#model<-build_model()
+model<-build_model_1d()
 optimizer<-build_optimizer_adam()
 
 
@@ -585,10 +602,10 @@ model<-model %>%
 # Train the model
 history<-model %>%
   fit(
-    data_train, data_train_label,
+    data_train_1d, data_train_label,
     epochs = 100,
-    batch_size = 32,
-    validation_data=list(data_test, data_test_label)
+    batch_size = 64,
+    validation_data=list(data_test_1d, data_test_label)
   )
 
 # Evaluate the trained model
@@ -598,7 +615,7 @@ plot(history)
 #bias<-as.matrix(model$layers[[lastlayer]]$weights[[2]])
 
 # Evaluate the model on test data
-metrics<-model %>% evaluate(data_test, data_test_label)
+metrics<-model %>% evaluate(data_test_1d, data_test_label)
 metrics
 
 # Observations from metrics:
