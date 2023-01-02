@@ -324,48 +324,8 @@ df<-df[,-"FLAG_OWN_REALTY"]
 # Flag mobiles: drop column --> all values are equal 1
 df<-df[,-"FLAG_MOBIL"]
 
-# Other contact type flags: also remove, may not be good predictors
-#df<-df[,-"FLAG_EMAIL"]
-#df<-df[,-"FLAG_PHONE"]
-#df<-df[,-"FLAG_WORK_PHONE"]
-
 # Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "None")
-#df$FLAG_SKILLED<-df$OCCUPATION_TYPE
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Accountants", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cleaning staff", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cooking staff", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Core staff", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Drivers", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "High skill tech staff", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "HR staff", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "IT staff", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Laborers", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Low-skill Laborers", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Managers", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Medicine staff", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "None", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Private service staff", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Realty agents", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Sales staff", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Secretaries", 1)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Security staff", 0)
-#df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Waiters/barmen staff", 0)
-#df$FLAG_SKILLED<-df$FLAG_SKILLED %>% as.numeric()
-#table(df$FLAG_SKILLED)
-#df<-df[,-"OCCUPATION_TYPE"]
-
-
-# Name Income Type: try to generalize the model better by reducing sparsity of some of the categorical values by creating new FLAG_WORKING = 0/1
-#df$FLAG_WORKING<-df$NAME_INCOME_TYPE
-#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Student", 0)
-#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Commercial associate", 1)
-#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Working", 1)
-#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "State servant", 1)
-#df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Pensioner", 0)
-#df$FLAG_WORKING<-df$FLAG_WORKING %>% as.numeric()
-#table(df$FLAG_WORKING)
-#df<-df[,-"NAME_INCOME_TYPE"]
 
 # Name Education Type: try to generalize the model better by reducing sparsity of some of the categorical values
 df$NAME_EDUCATION_TYPE<-replace(df$NAME_EDUCATION_TYPE, df$NAME_EDUCATION_TYPE == "Academic degree", "Higher education") # only 38 values, we combine Academic degree with Higher education
@@ -376,12 +336,6 @@ table(df$NAME_EDUCATION_TYPE)
 # Name Family Status: try to generalize the model better by reducing sparsity of some of the categorical values
 df$NAME_FAMILY_STATUS<-replace(df$NAME_FAMILY_STATUS, df$NAME_FAMILY_STATUS == "Civil marriage", "Married") # combine "Civil marriage" into "Married", what's the difference?
 table(df$NAME_FAMILY_STATUS)
-
-# Name Housing Type: try to generalize the model better by reducing sparsity of some of the categorical values
-#table(df$FLAG_WORKING)df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Office apartment", "Rented apartment") # combine all the apartment types
-#table(df$FLAG_WORKING)df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Co-op apartment", "Rented apartment")
-#table(df$FLAG_WORKING)df$NAME_HOUSING_TYPE<-replace(df$NAME_HOUSING_TYPE, df$NAME_HOUSING_TYPE == "Municipal apartment", "Rented apartment")
-#table(df$FLAG_WORKING)table(df$NAME_HOUSING_TYPE) 
 
 # All other catgorical features are muti-class (>2 classes) and need special one-hot encoding into one col per unique class value
 df <- dummy_cols(df, select_columns = c(
@@ -394,8 +348,9 @@ df <- dummy_cols(df, select_columns = c(
 
 # Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
 describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount") # huge outliers, we apply a threshold of 1.5 * IQR: Q3 + 1.5 * (Q3 - Q1) = 225K + 1.5 * (225K - 112.5K) = 393.75K
-df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 393750)
+df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 350000)
 df$AMT_INCOME_TOTAL<-min_max_normalize(df$AMT_INCOME_TOTAL)
+describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount (normalized)")
 
 # Days since birth: it is more intuitive to consider days since birth as a positive value
 describe_feature(df$DAYS_BIRTH, "Days since birth")
@@ -404,21 +359,28 @@ df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 describe_feature(df$DAYS_BIRTH, "Days since birth (normalized)")
 
 # Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
-# indicates missing data. We will thus apply a threshold of 0 before normalizing the feature (scale to 0-1).
+# indicates missing data. We will thus apply a threshold of 0 before log-normalizing the feature (scale to 0-1).
 describe_feature(df$DAYS_EMPLOYED, "Days employed")
 df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
-df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED)
-describe_feature(df$DAYS_EMPLOYED, "Days employed (normalized)")
+df$DAYS_EMPLOYED<-abs(df$DAYS_EMPLOYED)
+df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 10000000000) # log(10000000000) = 10
+df$DAYS_EMPLOYED<-log(df$DAYS_EMPLOYED)
+df$DAYS_EMPLOYED<-ifelse(is.finite(df$DAYS_EMPLOYED), df$DAYS_EMPLOYED, 0)
+df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED, scale = FALSE) # scale to 0-1
+describe_feature(df$DAYS_EMPLOYED, "Days employed (log-normalized)")
 
-# Children count: normalize the feature
+# Children count: log-normalize the feature
 describe_feature(df$CNT_CHILDREN, "Children count")
-df$CNT_CHILDREN<-min_max_normalize(df$CNT_CHILDREN)
+df$CNT_CHILDREN<-apply_threshold(df$CNT_CHILDREN, threshold = 7) # only 2 values have more
+df$CNT_CHILDREN<-min_max_normalize(df$CNT_CHILDREN, scale = FALSE) # scale to 0-1
 describe_feature(df$CNT_CHILDREN, "Children count (normalized)")
 
 # Family members count: normalize the feature
 describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
-df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS)
+df$CNT_FAM_MEMBERS<-apply_threshold(df$CNT_FAM_MEMBERS, threshold = 10) # only 2 values have more
+df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS, scale = FALSE) # scale to 0-1
 describe_feature(df$CNT_FAM_MEMBERS, "Family members count (normalized)")
+
 
 # check correlations between family and children count
 #cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we keep only the family members count
@@ -469,7 +431,7 @@ oversample_classes<-function (df_train) {
   num_majority<-sum(df_train$status_numeric == 0) # number of values of the majority class
   for (i in 1:7) {
     num_minority<-sum(df_train$status_numeric == i) # number of values of the minority class
-    duplication_factor<-ceiling(24000 / num_minority) - 1  # oversample so that we have at least 20K for each class
+    duplication_factor<-ceiling(5000 / num_minority) - 1  # oversample so that we have at least 5K for each class
     if (duplication_factor > 1) {
       df_train<-copy_class_data(df_train, n = duplication_factor, class=i)  
     }
@@ -556,12 +518,12 @@ build_optimizer_sgd<-function () {
 #* 
 build_optimizer_adam<-function () {
   adam<-optimizer_adam( 
-    learning_rate = 1e-4, # use "lr" in older releases of tensorflow !
+    learning_rate = 5e-5, # use "lr" in older releases of tensorflow !
     #lr = 1e-4,
     beta_1 = 0.9,
     beta_2 = 0.999,
-    weight_decay = 2e-6, # use "decay" in older releases of tensorflow !
-    #decay = 2e-6
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    #decay = 1e-6
   )
   return (adam)
 }
@@ -574,22 +536,24 @@ build_model <- function(shape_input, shape_output) {
   # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
   # hidden_layer = round((shape_input+shape_output)*(3/4), digits = 0)
   #neurons<-round((shape_input + shape_output)*(2/3), digits = 0)
-  neurons<-220
+  neurons<-100
 
   # Build the Keras network model
   model<-keras_model_sequential() 
   model %>% 
-    layer_dense(units = neurons, activation = "relu", input_shape = c(shape_input)) %>% #L1
-    layer_dense(units = neurons, activation = "relu") %>% # L2
-    layer_dense(units = neurons, activation = "relu") %>% # L3
-    layer_dense(units = neurons, activation = "relu") %>% # L4
-    layer_dense(units = neurons, activation = "relu") %>% # L5
-    layer_dense(units = neurons, activation = "relu") %>% # L6
-    layer_dense(units = neurons, activation = "relu") %>% # L7
-    layer_dense(units = neurons, activation = "relu") %>% # L8
-    layer_dense(units = neurons, activation = "relu") %>% # L9
-    layer_dense(units = neurons, activation = "relu") %>% # L10
-    layer_dense(units = shape_output, activation = "softmax")
+    layer_dense(units = 10*neurons, activation = "relu", input_shape = c(shape_input)) %>% # L1
+    layer_dropout(rate=0.10) %>%
+    layer_dense(units = 10*neurons, activation = "relu") %>% # L2
+    layer_dropout(rate=0.10) %>%
+    layer_dense(units = 10*neurons, activation = "relu") %>% # L3
+    layer_dropout(rate=0.10) %>%
+    layer_dense(units = 10*neurons, activation = "relu") %>% # L4
+    layer_dropout(rate=0.10) %>%
+    layer_dense(units = 8*neurons, activation = "relu") %>% # L5
+    layer_dense(units = 6*neurons, activation = "relu") %>% # L6
+    layer_dense(units = 4*neurons, activation = "relu") %>% # L7
+    layer_dense(units = 2*neurons, activation = "relu") %>% # L8
+    layer_dense(units = shape_output, activation = "softmax") # Output layer
 
   summary(model)
   
@@ -601,6 +565,7 @@ build_model <- function(shape_input, shape_output) {
 rm(model)
 rm(optimizer)
 rm(metrics)
+gc()
 
 # Build the model and optimizer
 shape_input=ncol(data_train)
@@ -621,8 +586,8 @@ model<-model %>%
 history<-model %>%
   fit(
     data_train, data_train_label,
-    epochs = 40,
-    batch_size = 16,
+    epochs = 100,
+    batch_size = 32,
     validation_data=list(data_test, data_test_label)
   )
 
