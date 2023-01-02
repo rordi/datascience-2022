@@ -272,9 +272,11 @@ apply_threshold <- function(feature, threshold = 1) {
 
 #**
 #* Function for min max scaling (standardization) of a feature
-#* e.g. when applying this function, the values in the column will be scaled to 0-1 range
+#* e.g. when applying this function, the values in the column will be centered and scaled to 0-1 range
 #* 
 min_max_normalize <- function(x) {
+  # scale
+  x<-scale(x, center = TRUE, scale = FALSE)
   # then we apply min-max normalization so that values are between 0 and 1
   return ((x-min(x))/(max(x)-min(x)))
 }
@@ -324,12 +326,40 @@ df<-df[,-"FLAG_WORK_PHONE"]
 
 # Occupation Type: fill empty values with a string "None" so that it will be one-hot encoded as well subsequently
 df$OCCUPATION_TYPE<-replace_na(df$OCCUPATION_TYPE, "None")
+df$FLAG_SKILLED<-df$OCCUPATION_TYPE
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Accountants", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cleaning staff", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Cooking staff", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Core staff", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Drivers", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "High skill tech staff", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "HR staff", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "IT staff", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Laborers", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Low-skill Laborers", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Managers", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Medicine staff", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "None", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Private service staff", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Realty agents", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Sales staff", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Secretaries", 1)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Security staff", 0)
+df$FLAG_SKILLED<-replace(df$FLAG_SKILLED, df$FLAG_SKILLED == "Waiters/barmen staff", 0)
+df$FLAG_SKILLED<-df$FLAG_SKILLED %>% as.numeric()
+df<-df[,-"OCCUPATION_TYPE"]
+table(df$FLAG_SKILLED)
 
-
-# Name Income Type: try to generalize the model better by reducing sparsity of some of the categorical values
-df$NAME_INCOME_TYPE<-replace(df$NAME_INCOME_TYPE, df$NAME_INCOME_TYPE == "Student", "Not working") # only 4 values, we combine Student + Pensioner into "Non working"
-df$NAME_INCOME_TYPE<-replace(df$NAME_INCOME_TYPE, df$NAME_INCOME_TYPE == "Pensioner", "Not working")
-table(df$NAME_INCOME_TYPE)
+# Name Income Type: try to generalize the model better by reducing sparsity of some of the categorical values by creating new FLAG_WORKING = 0/1
+df$FLAG_WORKING<-df$NAME_INCOME_TYPE
+df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Student", 0)
+df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Commercial associate", 1)
+df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Working", 1)
+df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "State servant", 1)
+df$FLAG_WORKING<-replace(df$FLAG_WORKING, df$FLAG_WORKING == "Pensioner", 0)
+df$FLAG_WORKING<-df$FLAG_WORKING %>% as.numeric()
+df<-df[,-"NAME_INCOME_TYPE"]
+table(df$FLAG_WORKING)
 
 # Name Education Type: try to generalize the model better by reducing sparsity of some of the categorical values
 df$NAME_EDUCATION_TYPE<-replace(df$NAME_EDUCATION_TYPE, df$NAME_EDUCATION_TYPE == "Academic degree", "Higher education") # only 38 values, we combine Academic degree with Higher education
@@ -352,20 +382,17 @@ df <- dummy_cols(df, select_columns = c(
   "NAME_INCOME_TYPE",
   "NAME_EDUCATION_TYPE",
   "NAME_FAMILY_STATUS",
-  "NAME_HOUSING_TYPE",
-  "OCCUPATION_TYPE"
+  "NAME_HOUSING_TYPE"
 ), remove_first_dummy = FALSE, remove_selected_columns = TRUE)
 
 # Total income: huge outliers - we apply a treshold, then normalize the feature (scale to 0-1)
 describe_feature(df$AMT_INCOME_TOTAL, "Total Income Amount") # huge outliers, we apply a threshold of 1.5 * IQR: Q3 + 1.5 * (Q3 - Q1) = 225K + 1.5 * (225K - 112.5K) = 393.75K
 df$AMT_INCOME_TOTAL<-apply_threshold(df$AMT_INCOME_TOTAL, threshold = 393750)
-df$AMT_INCOME_TOTAL<-scale(df$AMT_INCOME_TOTAL)
 df$AMT_INCOME_TOTAL<-min_max_normalize(df$AMT_INCOME_TOTAL)
 
 # Days since birth: it is more intuitive to consider days since birth as a positive value
 describe_feature(df$DAYS_BIRTH, "Days since birth")
 df$DAYS_BIRTH<-abs(df$DAYS_BIRTH)
-df$DAYS_BIRTH<-scale(df$DAYS_BIRTH)
 df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 
 # Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
@@ -373,17 +400,14 @@ df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
 describe_feature(df$DAYS_EMPLOYED, "Days employmed")
 df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
 describe_feature(df$DAYS_EMPLOYED, "Days employmed") # looks more like a powerlaw distribution now
-df$DAYS_EMPLOYED<-scale(df$DAYS_EMPLOYED)
 df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED)
 
 # Children count: normalize the feature
 describe_feature(df$CNT_CHILDREN, "Children count")
-df$CNT_CHILDREN<-scale(df$CNT_CHILDREN)
 df$CNT_CHILDREN<-min_max_normalize(df$CNT_CHILDREN)
 
 # Family members count: normalize the feature
 describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
-df$CNT_FAM_MEMBERS<-scale(df$CNT_FAM_MEMBERS)
 df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS)
 
 # check correlations between family and children count
@@ -431,12 +455,14 @@ copy_class_data <- function(df_train, n, class) {
 #* A simple function to balance classes by oversampling (copying) the minority classes recursively
 #* using copy_class_data() function defined above
 #*  
-balance_classes<-function (df_train) {
-  num_majority = sum(df_train$status == 0) # number of values of the majority class
+oversample_classes<-function (df_train) {
+  num_majority<-sum(df_train$status_numeric == 0) # number of values of the majority class
   for (i in 1:7) {
-    num_minority = sum(df_train$status == i) # number of values of the minority class
-    duplication_factor = round(num_majority / num_minority, digits = 0) - 1
-    df_train<-copy_class_data(df_train, n=duplication_factor, class=i)
+    num_minority<-sum(df_train$status_numeric == i) # number of values of the minority class
+    duplication_factor<-ceiling(12000 / num_minority) - 1  # oversample so that we have at least 10K for each class
+    if (duplication_factor > 1) {
+      df_train<-copy_class_data(df_train, n = duplication_factor, class=i)  
+    }
   }
   
   return (df_train)
@@ -456,14 +482,15 @@ encode_status<-function (df) {
 
 # TODO: replace with k-fold test/train split
 
-test_split = 0.2
-train_row =  (nrow(df)-round(nrow(df)*test_split, digits = 0))
-test_row = (train_row + 1)
+test_split<-0.2
+train_row<-(nrow(df)-round(nrow(df)*test_split, digits = 0))
+test_row<-(train_row + 1)
 
 # prepare train data, oversample minority classes, encode labels
 df_train<-df[0:train_row,]
-df_train<-balance_classes(df_train)
-table(df_train$status_numeric) # class values should be balanced now!
+table(df_train$status_numeric)
+df_train<-oversample_classes(df_train)
+table(df_train$status_numeric) # class values should be oversampled now!
 
 # encode the status labels as a matrix
 data_train_label<-encode_status(df_train)
@@ -502,11 +529,11 @@ View(data_test_label)
 build_optimizer_sgd<-function () {
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   sgd<-optimizer_sgd(
-    learning_rate = 1e-6, # use "lr" in older releases of tensorflow !
-    #lr = 1e-6,
+    learning_rate = 1e-3, # use "lr" in older releases of tensorflow !
+    #lr = 1e-3,
     momentum = 0.9,
-    weight_decay = 0, # use "decay" in older releases of tensorflow !
-    #decay = 0,
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
+    #decay = 1e-6,
     nesterov = FALSE,
     clipnorm = NULL,
     clipvalue = NULL)
@@ -519,11 +546,11 @@ build_optimizer_sgd<-function () {
 #* 
 build_optimizer_adam<-function () {
   adam<-optimizer_adam( 
-    learning_rate = 5e-5, # use "lr" in older releases of tensorflow !
-    #lr = 1e-4,
+    learning_rate = 1e-3, # use "lr" in older releases of tensorflow !
+    #lr = 1e-3,
     beta_1 = 0.9,
     beta_2 = 0.999,
-    weight_decay = 0, # use "decay" in older releases of tensorflow !
+    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
     #decay = 0
   )
   return (adam)
@@ -536,16 +563,17 @@ build_optimizer_adam<-function () {
 build_model <- function(shape_input, shape_output) {
   # amount of neurons in hidden layer: rule of thumb: mean of input and ouput shapes
   # hidden_layer = round((shape_input+shape_output)*(3/4), digits = 0)
-  hidden_layer = shape_input + shape_output
+  #neurons<-round((shape_input + shape_output)*(2/3), digits = 0)
+  neurons<-100
 
   # Build the Keras network model
   model<-keras_model_sequential() 
   model %>% 
-    layer_dense(units = shape_input, activation = "relu", input_shape = c(shape_input)) %>%
-    layer_dense(units = hidden_layer, activation = "relu") %>% # L2
-    layer_dense(units = hidden_layer, activation = "relu") %>% # L3
-    layer_dense(units = hidden_layer, activation = "relu") %>% # L4
-    layer_dense(units = round(hidden_layer/2, digits = 0), activation = "relu") %>% # L5
+    layer_dense(units = neurons, activation = "relu", input_shape = c(shape_input)) %>% #L1
+    layer_dense(units = neurons, activation = "relu") %>% # L2
+    layer_dense(units = neurons, activation = "relu") %>% # L3
+    layer_dense(units = neurons, activation = "relu") %>% # L4
+    layer_dense(units = neurons, activation = "relu") %>% # L4
     layer_dense(units = shape_output, activation = "softmax")
 
   summary(model)
@@ -578,8 +606,8 @@ model<-model %>%
 history<-model %>%
   fit(
     data_train, data_train_label,
-    epochs = 500,
-    batch_size = 128 # TODO decrese to 32 after param tuning for adam optimizer
+    epochs = 2000,
+    batch_size = 16
   )
 
 # Evaluate the trained model
@@ -600,7 +628,8 @@ metrics
 # - SGD optimizer:
 #    - learning rate of 0.01 was too big, reduced to initial value of 1e-4
 #    - weight decay: added some decay to avoid overfitting to training data (generalize the model better); we tried with 1e-5 and 1e-4, the smaller one was slightly better
-#
+# - Adam optimizer:
+#    - learning rate of 1e-4 was too large, 5e-5 showed less fast convergence
 #
 
 
