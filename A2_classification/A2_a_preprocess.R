@@ -274,12 +274,14 @@ apply_threshold <- function(feature, threshold = 1) {
 #* Function for min max scaling (standardization) of a feature
 #* e.g. when applying this function, the values in the column will be centered and scaled to 0-1 range
 #* 
-min_max_normalize <- function(x) {
+min_max_normalize <- function(x, scale = TRUE) {
   # first scale using 2 standard deviations around mean
-  m = mean(x)
-  s = 2 * sd(x)
-  x<-scale(x, center = m, scale = s)
-  
+  if (scale == TRUE) {
+    m = mean(x)
+    s = 2 * sd(x)
+    x<-scale(x, center = m, scale = s)
+  }
+
   # then we apply min-max normalization so that values are between 0 and 1
   return ((x-min(x))/(max(x)-min(x)))
 }
@@ -399,21 +401,24 @@ df$AMT_INCOME_TOTAL<-min_max_normalize(df$AMT_INCOME_TOTAL)
 describe_feature(df$DAYS_BIRTH, "Days since birth")
 df$DAYS_BIRTH<-abs(df$DAYS_BIRTH)
 df$DAYS_BIRTH<-min_max_normalize(df$DAYS_BIRTH)
+describe_feature(df$DAYS_BIRTH, "Days since birth (normalized)")
 
 # Days employed: the only positive value is improbable (365243 days, would be 1000 years). We assume that positive value
 # indicates missing data. We will thus apply a threshold of 0 before normalizing the feature (scale to 0-1).
 describe_feature(df$DAYS_EMPLOYED, "Days employed")
 df$DAYS_EMPLOYED<-apply_threshold(df$DAYS_EMPLOYED, threshold = 0)
-describe_feature(df$DAYS_EMPLOYED, "Days employed") # looks more like a powerlaw distribution now
 df$DAYS_EMPLOYED<-min_max_normalize(df$DAYS_EMPLOYED)
+describe_feature(df$DAYS_EMPLOYED, "Days employed (normalized)")
 
 # Children count: normalize the feature
 describe_feature(df$CNT_CHILDREN, "Children count")
 df$CNT_CHILDREN<-min_max_normalize(df$CNT_CHILDREN)
+describe_feature(df$CNT_CHILDREN, "Children count (normalized)")
 
 # Family members count: normalize the feature
 describe_feature(df$CNT_FAM_MEMBERS, "Family members count")
 df$CNT_FAM_MEMBERS<-min_max_normalize(df$CNT_FAM_MEMBERS)
+describe_feature(df$CNT_FAM_MEMBERS, "Family members count (normalized)")
 
 # check correlations between family and children count
 #cor(df$CNT_CHILDREN, df$CNT_FAM_MEMBERS) # 0.8784203 -> strongly correlated, we keep only the family members count
@@ -551,12 +556,12 @@ build_optimizer_sgd<-function () {
 #* 
 build_optimizer_adam<-function () {
   adam<-optimizer_adam( 
-    learning_rate = 3e-4, # use "lr" in older releases of tensorflow !
-    #lr = 3e-4,
+    learning_rate = 1e-4, # use "lr" in older releases of tensorflow !
+    #lr = 1e-4,
     beta_1 = 0.9,
     beta_2 = 0.999,
-    weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
-    #decay = 1e-6
+    weight_decay = 2e-6, # use "decay" in older releases of tensorflow !
+    #decay = 2e-6
   )
   return (adam)
 }
