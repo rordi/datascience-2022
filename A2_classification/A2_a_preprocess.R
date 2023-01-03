@@ -560,13 +560,14 @@ build_model_1d <- function() {
   shape_output<-8
   
   model = keras_model_sequential() %>%
-    layer_conv_1d(filters=64, kernel_size=6, input_shape=shape_input, activation="relu") %>%
-    layer_max_pooling_1d() %>%
-    layer_conv_1d(filters=48, kernel_size=2, activation="relu") %>%
+    layer_conv_1d(filters=64, kernel_size=8, input_shape=shape_input, activation="relu") %>%
+    layer_conv_1d(filters=64, kernel_size=2, activation="relu") %>%
     layer_max_pooling_1d() %>%
     layer_flatten() %>%
-    layer_dense(units = 480, activation = "relu") %>%
-    layer_dense(units = 480, activation = "relu") %>%
+    layer_dense(units = 640, activation = "relu") %>%
+    layer_dense(units = 640, activation = "relu") %>%
+    layer_dense(units = 640, activation = "relu") %>%
+    layer_dropout(rate = 0.1) %>%
     layer_dense(units = shape_output, activation = "softmax") # Output layer
   
   summary(model)
