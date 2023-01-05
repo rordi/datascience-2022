@@ -158,7 +158,7 @@ df_raw<-df_raw[-which(is.na(df_raw$delinq_2yrs))] # make df_raw same length as d
 
 # we take a closer look at the int_rate, which is our target variable!
 df_int_rate<-df[, c("int_rate")]
-df_int_rate$int_rate<-(df_int_rate$int_rate/100) # scale percentage to numeric [accordingly, we scale MAE and MSE * 100 at the end when looking at the models!]
+#df_int_rate$int_rate<-(df_int_rate$int_rate/100) # scale percentage to numeric [accordingly, we scale MAE and MSE * 100 at the end when looking at the models!]
 df = subset(df, select = -c(
   int_rate # remove or target from the working copy data frame
 ))
@@ -871,19 +871,15 @@ corrplot(cor(df_selection))
 # REGRESSION MODEL SELECTION
 # =====================================================================
 
-
-prepare_data<-function() {
-  # copy the int_rates back to selection df before we split
-  df_selection$int_rate<-df_int_rate[, c("int_rate")]
+# copy the int_rates back to selection df before we split
+df_selection$int_rate<-df_int_rate[, c("int_rate")]
   
   
-  # create test and train splits of the data
-  split<-0.2
-  cuttoff=round(nrow(df_selection)*split)
-  train_data<-df_selection[0:cuttoff,]
-  test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
-}
-prepare_data()
+# create test and train splits of the data
+split<-0.2
+cuttoff=round(nrow(df_selection)*split)
+train_data<-df_selection[0:cuttoff,]
+test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 
 
 
@@ -897,12 +893,11 @@ prepare_data()
 reg_linear<-function() {
   model_linear<-lm(int_rate~., data=train_data)
   yhat<-predict(model_linear, test_data)
-  print(paste0('MAE (model_linear): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_linear): 3.3742
+  mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MSE (model_linear): ' , (mse*100))) # MSE (model_regression_tree): 0.1927
+  print(paste0('MAE (model_linear): ' , mae)) # MAE (model_linear): 
+  print(paste0('MSE (model_linear): ' , mse)) # MSE (model_regression_tree): 
 }
-
-prepare_data()
 reg_linear()
 
 
@@ -913,12 +908,11 @@ reg_linear()
 reg_tree<-function() {
   model_regression_tree<-rpart(int_rate~., data=train_data, control=rpart.control(cp=.0001))
   yhat<-predict(model_regression_tree, test_data)
-  print(paste0('MAE (model_regression_tree): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_regression_tree): 3.2930
+  mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MSE (model_regression_tree): ' , (mse*100))) # MSE (model_regression_tree): 0.1821
+  print(paste0('MAE (model_regression_tree): ' , mae)) # MAE (model_regression_tree): 
+  print(paste0('MSE (model_regression_tree): ' , mse)) # MSE (model_regression_tree): 
 }
-
-prepare_data()
 reg_tree()
 
 
@@ -927,13 +921,11 @@ reg_tree()
 # Random Forest
 reg_random_forest<-function() {
   model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 100, mtry=10, ntree = 200)
-  yhat<-predict(model_random_forest, test_data)
-  print(paste0('MAE (model_random_forest): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_random_forest): 3.3103
+  mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MSE (model_random_forest): ' , (mse*100))) # MSE (model_random_forest): 0.1834
+  print(paste0('MAE (model_random_forest): ' , mae)) # MAE (model_random_forest): 
+  print(paste0('MSE (model_random_forest): ' , mse)) # MSE (model_random_forest): 
 }
-
-prepare_data()
 reg_random_forest()
 
 
@@ -946,13 +938,11 @@ reg_adaboost<-function () {
                         shrinkage = .01,
                         n.minobsinnode = 10,
                         n.trees = 500)
-  yhat<-predict(model_adaboost, test_data)
-  print(paste0('MAE (model_adaboost): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_adaboost): 3.5288
+  mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MSE (model_adaboost): ' , (mse*100))) # MSE (model_adaboost): 0.2054
+  print(paste0('MAE (model_adaboost): ' , mae)) # MAE (model_adaboost): 
+  print(paste0('MSE (model_adaboost): ' , mse)) # MSE (model_adaboost): 
 }
-
-prepare_data()
 reg_adaboost()
 
 
