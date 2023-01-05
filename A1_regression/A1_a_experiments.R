@@ -334,9 +334,7 @@ handle_states<-function(df) {
 }
 
 #**
-#* function to employment length data; this is based on findings from dummy encoding
-#* using the states with negative corr. coeff. ("good states") improved the result
-#* It is not a beauty of programming but it works ;)
+#* function to employment length data
 #* 
 handle_empt_length<-function(feature) {
   return(ifelse(feature=="< 1 year", 0.5,
@@ -351,6 +349,24 @@ handle_empt_length<-function(feature) {
                                                                         ifelse(feature=="9 years", 9,
                                                                                ifelse(feature=="10+ years", 10, NA))))))))))))
 }
+
+
+#**
+#* function to regroup good purposes into one flag, this is based on findings from
+#* dummy encoding
+#*
+handle_purpose<-function(df) {
+  return(
+    ifelse(
+      df$purpose == 'educational' | 
+        df$purpose == 'home_improvement' |
+        df$purpose == 'major_purchase' | 
+        df$purpose == 'car' | 
+        df$purpose == 'credit_card'
+      , 1, 0)
+  )
+}
+
 
 # =====================================================================
 # FEATURE SELECTION OF EXISTING FEATURES
@@ -390,7 +406,6 @@ df_dummies<-df
 numcol<-ncol(df_dummies)
 df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status_combined", "purpose", "home_ownership", "addr_state"))
 df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
-#View(df_dummies) # uncomment to open the table view of the df
 
 # here we compute the correlations with target variable for each of the dummy variables and sort them descending by absolute value
 # (either strongly negative or strongly positive correlated on top). 
@@ -398,6 +413,8 @@ z<-cor(df_int_rate$int_rate, df_dummies)
 z[z == 1] <- NA #drop perfect
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
+
+z[order(-(z$value)),] # sort
 
 # based on theses correlations, it seems the following dummy vars seem interesting tp pursue further!
 #
@@ -449,6 +466,9 @@ df = subset(df, select = -c(
 # variable (this worked better as group rather than using dummy encoded states individually)
 df$good_states<-handle_states(df_raw)
 describe_feature(df$good_states, "Good States") #-0.029 correlation
+
+df$good_purposes<-handle_purpose(df_raw)
+describe_feature(df$good_purposes, "Good Purposes") #-0.1849 correlation
 
 # initial_list_status (w/f) -> encode as 0/a
 df$initial_list_status<-replace(df$initial_list_status, df$initial_list_status == 'w', 0)
@@ -815,6 +835,7 @@ df_selection<-df[, c(
   "revol_util",
   "loan_to_wealth_index",
   "inq_last_6mths",
+  "good_purposes",
   "declared_dti",
   "loan_amnt",
   "total_rev_hi_lim",
@@ -919,8 +940,8 @@ reg_linear<-function() {
 }
 reg_linear()
 
-#[1] "MAE (model_linear): 3.37418326864417"
-#[1] "MSE (model_linear): 19.2671032704971"
+#[1] "MAE (model_linear): 3.33941078770344"
+#[1] "MSE (model_linear): 18.9088306626918"
 
 
 
@@ -933,14 +954,13 @@ reg_tree<-function() {
   yhat<-predict(model_regression_tree, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MAE (model_regression_tree): ' , mae)) # MAE (model_regression_tree): 
-  print(paste0('MSE (model_regression_tree): ' , mse)) # MSE (model_regression_tree): 
+  print(paste0('MAE (model_regression_tree): ' , mae))
+  print(paste0('MSE (model_regression_tree): ' , mse))
 }
 reg_tree()
 
-#[1] "MAE (model_regression_tree): 3.29301827815585"
-#[1] "MSE (model_regression_tree): 18.2092044869907"
-
+#[1] "MAE (model_regression_tree): 3.2514833048632"
+#[1] "MSE (model_regression_tree): 17.7943930272151"
 
 
 
@@ -948,14 +968,14 @@ reg_tree()
 #---------------------------------------------------------------------------
 
 reg_random_forest<-function() {
-  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = NULL, mtry=7, ntree = 120)
+  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 250, mtry=7, ntree = 120)
   yhat<-predict(model_random_forest, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
   print(paste0('MAE (model_random_forest): ' , mae))
   print(paste0('MSE (model_random_forest): ' , mse))
 }
-reg_random_forest() # slow !
+# reg_random_forest() # slow !
 
 # "MAE (model_random_forest): 3.31225578804117"
 # "MSE (model_random_forest): 18.3619827351034"
@@ -976,13 +996,13 @@ reg_adaboost<-function () {
   yhat<-predict(model_adaboost, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MAE (model_adaboost): ' , mae)) # MAE (model_adaboost): 
-  print(paste0('MSE (model_adaboost): ' , mse)) # MSE (model_adaboost): 
+  print(paste0('MAE (model_adaboost): ' , mae))
+  print(paste0('MSE (model_adaboost): ' , mse))
 }
 reg_adaboost()
 
-# "MAE (model_adaboost): 3.5297919300304"
-# "MSE (model_adaboost): 20.5539024956651"
+#[1] "MAE (model_adaboost): 3.69838221178991"
+#[1] "MSE (model_adaboost): 22.1401418482551"
 
 
 
@@ -1000,18 +1020,23 @@ reg_xgboost<-function() {
   model_xgboost <- xgboost(
     data = train_data_matrix,
     label = labels_vector,
-    max.depth = 10,
-    eta = 0.3,
+    eta = 0.15,
+    max.depth = 8,
     nthread = 2,
-    nrounds = 120,
+    nrounds = 90,
+    lambda=0.2,
     objective = "reg:squarederror",
-    verbose = 0
+    eval_metric='rmse',
+    verbose = 1
   )
   yhat<-predict(model_xgboost, test_data_matrix)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MAE (model_xgboost): ' , mae)) # MAE (model_xgboost): 
-  print(paste0('MSE (model_xgboost): ' , mse)) # MSE (model_xgboost): 
+  print(paste0('MAE (model_xgboost): ' , mae))
+  print(paste0('MSE (model_xgboost): ' , mse))
 }
 reg_xgboost()
+
+#[1] "MAE (model_xgboost): 3.05814907614606"
+#[1] "MSE (model_xgboost): 15.9245715411197"
 
