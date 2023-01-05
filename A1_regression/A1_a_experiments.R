@@ -520,7 +520,7 @@ describe_feature(df$annual_inc_joint, "Annual Income (joint)")
 
 df$annual_inc_combined<-ifelse(df$application_type==1, df$annual_inc_joint, df$annual_inc) # merge joint income onto income column
 describe_feature(df$annual_inc_combined, "Annual Income (combined)") # -0.073 correlation
-df$annual_inc_combined<-apply_threshold(df$annual_inc_combined, threshold = 112500) # applying 1.5*IRQ 
+df$annual_inc_combined<-apply_threshold(df$annual_inc_combined, threshold = 150000) # applying 1.5*IRQ 
 describe_feature(df$annual_inc_combined, "Annual Income (combined, thresholded)") # -0.11 correlation
 
 df = subset(df, select = -c(
@@ -618,6 +618,7 @@ df$tot_coll_amt<-handle_na(df$tot_coll_amt)
 # tot_cur_bal
 describe_feature(df$tot_cur_bal, "Total current balance") # many outliers, -0.075 correlation
 df$tot_cur_bal<-handle_na(df$tot_cur_bal)
+df$tot_cur_bal<-apply_threshold(df$tot_cur_bal, threshold = 280000) # threshold 1.5*IRQ
 
 # pub_rec
 describe_feature(df$pub_rec, "Public Record") # many outliers, -0.011 correlation
@@ -809,7 +810,7 @@ z[z == 1] <- NA #drop perfect
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
 
-# Step (1) -- cut off at +/-0.025 correlation with interest rate
+# Step (1) -- cut off at +/-0.05 correlation with interest rate
 df_selection<-df[, c(
   "revol_util",
   "loan_to_wealth_index",
@@ -829,14 +830,7 @@ df_selection<-df[, c(
   "home_ownership_MORTGAGE",
   "mths_since_last_record",
   "delinq_2yrs",
-  "pub_rec",
-  "total_acc",
-  "mths_since_last_delinq",
-  "mths_since_rcnt_il",
-  "max_bal_bc",
-  "revol_bal",
-  "good_states",
-  "acc_now_delinq"
+  "pub_rec"
 )] 
 
 # Step (2) -- correlation matrix so we can exclude highly dependent variables
@@ -847,24 +841,41 @@ df_selection = subset(df_selection, select = -c(
   home_ownership_MORTGAGE
 ))
 
-# drop revol_bal which is correlated with loan_amnt (and loan_amnt is slightly better predictor)
-df_selection = subset(df_selection, select = -c(
-  revol_bal
-))
-
-# our engineer featured months_since_bad_situation is better but correlated with mths_since_last_major_derog and mths_since_last_delinq - we drop latter two
+# our engineer featured months_since_bad_situation is better but correlated with mths_since_last_major_derog and mths_since_last_record - we drop latter two
 df_selection = subset(df_selection, select = -c(
   mths_since_last_major_derog,
-  mths_since_last_delinq
-))
-
-# drop pub_rec which is correlated with mths_since_last_record and latter is slightly better predictor
-df_selection = subset(df_selection, select = -c(
-  pub_rec
+  mths_since_last_record
 ))
 
 # we are rasonable happy now wiht (1) and (2) !
 corrplot(cor(df_selection))
+
+
+# =====================================================================
+# FEATURE SCALING
+# =====================================================================
+
+min_max_scale<-function(x, known_min, known_max) {
+  range = (known_max - known_min)
+  x<-ifelse(x < known_min, known_min, x)
+  x<-ifelse(x > known_max, known_max, x)
+ return ((x-known_min)/range)
+}
+
+# we use fix min and max values based on the dataset so that we can copy this 1:1 to the prediction file
+df_selection$revol_util<-min_max_scale(df_selection$revol_util, 0, 92)
+df_selection$loan_to_wealth_index<-min_max_scale(df_selection$loan_to_wealth_index, 0, 0.05)
+df_selection$inq_last_6mths<-min_max_scale(df_selection$inq_last_6mths, 0, 33)
+df_selection$declared_dti<-min_max_scale(df_selection$declared_dti, 0, 44)
+df_selection$loan_amnt<-min_max_scale(df_selection$loan_amnt, 500, 35000)
+df_selection$total_rev_hi_lim<-min_max_scale(df_selection$total_rev_hi_lim, 0, 9999999)
+df_selection$annual_inc_combined<-min_max_scale(df_selection$annual_inc_combined, 0, 150000)
+df_selection$earliest_cr_line<-min_max_scale(df_selection$earliest_cr_line, 1944, 2012)
+df_selection$months_since_bad_situation<-min_max_scale(df_selection$months_since_bad_situation, 0, 420)
+df_selection$tot_cur_bal<-min_max_scale(df_selection$tot_cur_bal, 0, 280000)
+df_selection$delinq_2yrs<-min_max_scale(df_selection$delinq_2yrs, 0, 39)
+df_selection$pub_rec<-min_max_scale(df_selection$pub_rec, 0, 63)
+
 
 
 
@@ -898,13 +909,13 @@ reg_linear<-function() {
   yhat<-predict(model_linear, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MAE (model_linear): ' , mae)) # MAE (model_linear): 
-  print(paste0('MSE (model_linear): ' , mse)) # MSE (model_regression_tree): 
+  print(paste0('MAE (model_linear): ' , mae))
+  print(paste0('MSE (model_linear): ' , mse))
 }
 reg_linear()
 
-# "MAE (model_linear): 3.37418326864417"
-# "MSE (model_linear): 19.2671032704971"
+#[1] "MAE (model_linear): 3.37418326864417"
+#[1] "MSE (model_linear): 19.2671032704971"
 
 
 
@@ -922,8 +933,8 @@ reg_tree<-function() {
 }
 reg_tree()
 
-# "MAE (model_regression_tree): 3.29301827815585"
-# "MSE (model_regression_tree): 18.2092044869907"
+#[1] "MAE (model_regression_tree): 3.29301827815585"
+#[1] "MSE (model_regression_tree): 18.2092044869907"
 
 
 
@@ -932,14 +943,14 @@ reg_tree()
 #---------------------------------------------------------------------------
 
 reg_random_forest<-function() {
-  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 100, mtry=10, ntree = 200)
+  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = NULL, mtry=7, ntree = 200)
   yhat<-predict(model_random_forest, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
-  print(paste0('MAE (model_random_forest): ' , mae)) # MAE (model_random_forest): 
-  print(paste0('MSE (model_random_forest): ' , mse)) # MSE (model_random_forest): 
+  print(paste0('MAE (model_random_forest): ' , mae))
+  print(paste0('MSE (model_random_forest): ' , mse))
 }
-reg_random_forest()
+# reg_random_forest() - slow
 
 # "MAE (model_random_forest): 3.31225578804117"
 # "MSE (model_random_forest): 18.3619827351034"
@@ -956,7 +967,7 @@ reg_adaboost<-function () {
                         cv.folds = 10,
                         shrinkage = .01,
                         n.minobsinnode = 10,
-                        n.trees = 500)
+                        n.trees = 140)
   yhat<-predict(model_adaboost, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
@@ -984,11 +995,12 @@ reg_xgboost<-function() {
   model_xgboost <- xgboost(
     data = train_data_matrix,
     label = labels_vector,
-    max.depth = 2,
-    eta = 1,
+    max.depth = 10,
+    eta = 0.18,
     nthread = 2,
-    nrounds = 2,
-    objective = "reg:squarederror"
+    nrounds = 100,
+    objective = "reg:squarederror",
+    verbose = 0
   )
   yhat<-predict(model_xgboost, test_data_matrix)
   mae<-mae(test_data$int_rate, yhat)
