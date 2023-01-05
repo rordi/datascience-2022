@@ -157,7 +157,7 @@ df_raw<-df_raw[-which(is.na(df_raw$delinq_2yrs))] # make df_raw same length as d
 # this is a step that WILL NOT BE DONE in the final script - the final script is not supposed to contain the int_rate!
 
 # we take a closer look at the int_rate, which is our target variable!
-df_int_rate <- df[, c("int_rate")]
+df_int_rate<-df[, c("int_rate")]
 df_int_rate$int_rate<-(df_int_rate$int_rate/100) # scale percentage to numeric [TODO - we will need to scale back MSE according to Gwen's email]
 df = subset(df, select = -c(
   int_rate # remove or target from the working copy data frame
@@ -724,16 +724,86 @@ z[order(-abs(z$value)),] # sort
 
 
 
+# =====================================================================
+# FEATURE ENGINEERING: CANDIDATE NEW VARIABLES
+# =====================================================================
+
+# has_wrong_doing
+df$has_wrong_doing<-ifelse(df$pub_rec==0 & df$delinq_2yrs==0 & df$mths_since_last_major_derog==0,0,1)
+describe_feature(df$has_wrong_doing, "Has wrong doing") # 0.103 correlation
+
+# months_since_bad_situation
+df$months_since_bad_situation<-(df$mths_since_last_major_derog+df$mths_since_last_delinq+df$mths_since_last_record)
+describe_feature(df$months_since_bad_situation, "Months since bad situation") # 0.084 correlation
+
+# loan_to_wealth_index
+df$loan_to_wealth_index<-(df$loan_amnt/(1+df$tot_cur_bal+7*df$annual_inc))
+describe_feature(df$loan_to_wealth_index, "Loan to wealth index") # 0.243 correlation
+df$loan_to_wealth_index<-apply_threshold(df$loan_to_wealth_index, 0.045) # treshold 1.5*IRQ
+describe_feature(df$loan_to_wealth_index, "Loan to wealth index (tresholded)") # 0.244 correlation
+
+# good_employment
+df$good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", df_nlp$emp_title)==TRUE,1,0)
+describe_feature(df$good_employment, "Good Employment") # -0.081 correlation
 
 
 
+# =====================================================================
+# FEATURE SELECTION
+# =====================================================================
 
+# we try select features that:
+#    (1) have high correlation with interest rate; and
+#    (2) have low correlation with other features (low interdependency)
+
+# compute correlations between all our features and our target variable --> we can use it to
+# drop some features that contribute only very little to explain the interest rate
+z<-cor(df_int_rate$int_rate, df)
+z[z == 1] <- NA #drop perfect
+z<-na.omit(melt(z)) # melt! 
+z[order(-abs(z$value)),] # sort
+
+# Step (1) -- cut off at +/-0.025 correlation with interest rate
+df_selection<-df[, c(
+  "revol_util",
+  "loan_to_wealth_index",
+  "inq_last_6mths",
+  "declared_dti",
+  "loan_amnt",
+  "total_rev_hi_lim",
+  "initial_list_status",
+  "annual_inc_combined",
+  "earliest_cr_line",
+  "has_wrong_doing",
+  "months_since_bad_situation",
+  "good_employment", 
+  "tot_cur_bal",
+  "mths_since_last_major_derog",
+  "home_ownership_RENT",
+  "home_ownership_MORTGAGE",
+  "mths_since_last_record",
+  "delinq_2yrs",
+  "pub_rec",
+  "total_acc",
+  "mths_since_last_delinq",
+  "mths_since_rcnt_il",
+  "max_bal_bc",
+  "revol_bal",
+  "good_states",
+  "acc_now_delinq"
+)] 
+
+# Step (2) -- correlation matrix so we can exclude highly dependent variables
+corrplot(cor(df_selection))
 
 
 # =====================================================================
 # FEATURE ENGINEERING ON TEXT FEATURES (NLP)
 # =====================================================================
 
+nlp_exeriment<-function() {
+  
+}
 
 #NLP empl_title variable
 NLP<-VCorpus(VectorSource(df_nlp$emp_title))
@@ -773,34 +843,6 @@ summary(Base_model)
 
 
 
-
-# =====================================================================
-# FEATURE ENGINEERING: CANDIDATE NEW VARIABLES
-# =====================================================================
-
-#Class_Income
-df$Class_Income<-ifelse(df$annual_inc<15000,0,ifelse(df$annual_inc>=15000 & df$annual_inc<35000,1,ifelse(df$annual_inc>=35000 & df$annual_inc<60000,2,ifelse(df$annual_inc>=60000 & df$annual_inc<100000,3,4))))
-cor(df_int_rate$int_rate,df$Class_Income)
-
-
-#Has_something_wrong_done
-df$Has_something_wrong_done<-ifelse(df$pub_rec==0 & df$delinq_2yrs==0 & df$mths_since_last_major_derog==0,0,1)
-cor(df_int_rate$int_rate,df$Has_something_wrong_done)
-
-#months_since_bad_situation
-df$months_since_bad_situation<-(df$mths_since_last_major_derog+df$mths_since_last_delinq+df$mths_since_last_record)
-cor(df$months_since_bad_situation,df_int_rate$int_rate)
-
-#Loan_to_Wealth_index
-df$Loan_to_Wealth_index<-df$loan_amnt/(1+df$tot_cur_bal+7*df$annual_inc)
-cor(df_int_rate$int_rate,df$Loan_to_Wealth_index)
-
-#Good_employment
-df_nlp$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", df_nlp$emp_title)==TRUE,1,0)
-cor(df_int_rate$int_rate,df_nlp$Good_employment)
-df$Good_employment<-df_nlp$Good_employment
-
-#(!) still possible to investigate how other variables can be combined to produce better predictors
 
 
 
