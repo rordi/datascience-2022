@@ -43,6 +43,7 @@ install_packages_regression<-function() {
   install.packages("Metrics")
   install.packages("caret")
   install.packages("gbm")
+  install.packages("xgboost")
 }
 #install_packages_regression() # uncomment when running first time!
 
@@ -64,7 +65,7 @@ library("Metrics")
 library("rpart")
 library("caret")
 library('gbm')
-
+library('xgboost')
 
 
 # =====================================================================
@@ -888,7 +889,9 @@ test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 # COMPARE DIFFERENT REGRESSION MODELS
 # =====================================================================
 
+
 # Multiple Linear Regression
+#---------------------------------------------------------------------------
 
 reg_linear<-function() {
   model_linear<-lm(int_rate~., data=train_data)
@@ -900,10 +903,14 @@ reg_linear<-function() {
 }
 reg_linear()
 
+# "MAE (model_linear): 3.37418326864417"
+# "MSE (model_linear): 19.2671032704971"
+
 
 
 
 # Regression Tree
+#---------------------------------------------------------------------------
 
 reg_tree<-function() {
   model_regression_tree<-rpart(int_rate~., data=train_data, control=rpart.control(cp=.0001))
@@ -915,12 +922,18 @@ reg_tree<-function() {
 }
 reg_tree()
 
+# "MAE (model_regression_tree): 3.29301827815585"
+# "MSE (model_regression_tree): 18.2092044869907"
+
 
 
 
 # Random Forest
+#---------------------------------------------------------------------------
+
 reg_random_forest<-function() {
   model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 100, mtry=10, ntree = 200)
+  yhat<-predict(model_random_forest, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
   print(paste0('MAE (model_random_forest): ' , mae)) # MAE (model_random_forest): 
@@ -928,9 +941,15 @@ reg_random_forest<-function() {
 }
 reg_random_forest()
 
+# "MAE (model_random_forest): 3.31225578804117"
+# "MSE (model_random_forest): 18.3619827351034"
+
+
 
 
 # AdaBoost
+#---------------------------------------------------------------------------
+
 reg_adaboost<-function () {
   model_adaboost <- gbm(int_rate~., data=train_data,
                         distribution = "gaussian",
@@ -938,6 +957,7 @@ reg_adaboost<-function () {
                         shrinkage = .01,
                         n.minobsinnode = 10,
                         n.trees = 500)
+  yhat<-predict(model_adaboost, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
   print(paste0('MAE (model_adaboost): ' , mae)) # MAE (model_adaboost): 
@@ -945,6 +965,36 @@ reg_adaboost<-function () {
 }
 reg_adaboost()
 
+# "MAE (model_adaboost): 3.5297919300304"
+# "MSE (model_adaboost): 20.5539024956651"
+
+
+
 
 # XG-Boost
-# TODO !!!
+#---------------------------------------------------------------------------
+
+reg_xgboost<-function() {
+  labels_vector<-data.matrix(train_data$int_rate)
+  train_data_matrix<-data.matrix(train_data)
+  train_data_matrix<-train_data_matrix[,colnames(train_data_matrix)!="int_rate"] # remove int_rate from train data matrix
+  test_data_matrix<-data.matrix(test_data)
+  test_data_matrix<-test_data_matrix[,colnames(test_data_matrix)!="int_rate"] # remove int_rate from train data matrix
+  
+  model_xgboost <- xgboost(
+    data = train_data_matrix,
+    label = labels_vector,
+    max.depth = 2,
+    eta = 1,
+    nthread = 2,
+    nrounds = 2,
+    objective = "reg:squarederror"
+  )
+  yhat<-predict(model_xgboost, test_data_matrix)
+  mae<-mae(test_data$int_rate, yhat)
+  mse<-mean((yhat-test_data$int_rate)^2)
+  print(paste0('MAE (model_xgboost): ' , mae)) # MAE (model_xgboost): 
+  print(paste0('MSE (model_xgboost): ' , mse)) # MSE (model_xgboost): 
+}
+reg_xgboost()
+
