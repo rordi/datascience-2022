@@ -158,7 +158,7 @@ df_raw<-df_raw[-which(is.na(df_raw$delinq_2yrs))] # make df_raw same length as d
 
 # we take a closer look at the int_rate, which is our target variable!
 df_int_rate<-df[, c("int_rate")]
-df_int_rate$int_rate<-(df_int_rate$int_rate/100) # scale percentage to numeric [TODO - we will need to scale back MSE according to Gwen's email]
+df_int_rate$int_rate<-(df_int_rate$int_rate/100) # scale percentage to numeric [accordingly, we scale MAE and MSE * 100 at the end when looking at the models!]
 df = subset(df, select = -c(
   int_rate # remove or target from the working copy data frame
 ))
@@ -173,9 +173,9 @@ df_nlp<-df[,c("title", "emp_title", "desc")]
 
 # remove string attributes from the main dataframe (we can copy back later interesting attributes from NLP frame after processing - our main dataframe should be purely numeric!)
 df = subset(df, select = -c(
-  title,         # the title of the loan application -- @TODO -- code as dummy variables / NLP? (ca. 56K unique values)
-  emp_title,     # the job title of the loan applicant -- @TODO -- code as dummy variables / NLP? (ca. 265K unique values)
-  desc           # some free text provided by loan applicant on why the want / need to borrow -- @TODO -- use NLP? (86% null, ca. 112K unique values)
+  title,         # the title of the loan application -- (ca. 56K unique values) use NLP?
+  emp_title,     # the job title of the loan applicant -- (ca. 265K unique values) use NLP?
+  desc           # some free text provided by loan applicant on why the want / need to borrow -- (86% null, ca. 112K unique values) use NLP?
 ))
 
 
@@ -872,15 +872,19 @@ corrplot(cor(df_selection))
 # =====================================================================
 
 
-# copy the int_rates back to selection df before we split
-df_selection$int_rate<-df_int_rate[, c("int_rate")]
+prepare_data<-function() {
+  # copy the int_rates back to selection df before we split
+  df_selection$int_rate<-df_int_rate[, c("int_rate")]
+  
+  
+  # create test and train splits of the data
+  split<-0.2
+  cuttoff=round(nrow(df_selection)*split)
+  train_data<-df_selection[0:cuttoff,]
+  test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
+}
+prepare_data()
 
-
-# create test and train splits of the data
-split<-0.2
-cuttoff=round(nrow(df_selection)*split)
-train_data<-df_selection[0:cuttoff,]
-test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 
 
 
@@ -889,33 +893,68 @@ test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 # =====================================================================
 
 # Multiple Linear Regression
-model_linear<-lm(int_rate~., data=train_data)
-model_linear_prediction<-predict(model_linear,test_data)
-print(paste0('MAE (model_linear): ' , (mae(test_data$int_rate,model_linear_prediction)*100))) # MAE (model_linear): 3.8356
-summary(model_linear)
+
+reg_linear<-function() {
+  model_linear<-lm(int_rate~., data=train_data)
+  yhat<-predict(model_linear, test_data)
+  print(paste0('MAE (model_linear): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_linear): 3.3742
+  mse<-mean((yhat-test_data$int_rate)^2)
+  print(paste0('MSE (model_linear): ' , (mse*100))) # MSE (model_regression_tree): 0.1927
+}
+
+prepare_data()
+reg_linear()
+
+
 
 
 # Regression Tree
-model_regression_tree<-rpart(int_rate~., data=train_data, control=rpart.control(cp=.0001))
-model_regression_tree_prediction<-predict(model_regression_tree, test_data)
-print(paste0('MAE (model_regression_tree): ' , (mae(test_data$int_rate, model_regression_tree_prediction)*100))) # MAE (model_regression_tree): 3.2930
+
+reg_tree<-function() {
+  model_regression_tree<-rpart(int_rate~., data=train_data, control=rpart.control(cp=.0001))
+  yhat<-predict(model_regression_tree, test_data)
+  print(paste0('MAE (model_regression_tree): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_regression_tree): 3.2930
+  mse<-mean((yhat-test_data$int_rate)^2)
+  print(paste0('MSE (model_regression_tree): ' , (mse*100))) # MSE (model_regression_tree): 0.1821
+}
+
+prepare_data()
+reg_tree()
+
+
 
 
 # Random Forest
-model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 100, mtry=10, ntree = 200)
-model_random_forest_prediction<-predict(model_random_forest, test_data)
-print(paste0('MAE (model_random_forest): ' , (mae(test_data$int_rate, model_random_forest_prediction)*100))) # MAE (model_random_forest): 3.3099
+reg_random_forest<-function() {
+  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 100, mtry=10, ntree = 200)
+  yhat<-predict(model_random_forest, test_data)
+  print(paste0('MAE (model_random_forest): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_random_forest): 3.3103
+  mse<-mean((yhat-test_data$int_rate)^2)
+  print(paste0('MSE (model_random_forest): ' , (mse*100))) # MSE (model_random_forest): 0.1834
+}
+
+prepare_data()
+reg_random_forest()
+
 
 
 # AdaBoost
-model_adaboost <- gbm(int_rate~., data=train_data,
-                      distribution = "gaussian",
-                      cv.folds = 10,
-                      shrinkage = .01,
-                      n.minobsinnode = 10,
-                      n.trees = 500)
-model_adaboost_prediction<-predict(model_adaboost, test_data)
-print(paste0('MAE (model_adaboost): ' , (mae(test_data$int_rate, model_adaboost_prediction)*100))) # MAE (model_adaboost): 3.5310
+reg_adaboost<-function () {
+  model_adaboost <- gbm(int_rate~., data=train_data,
+                        distribution = "gaussian",
+                        cv.folds = 10,
+                        shrinkage = .01,
+                        n.minobsinnode = 10,
+                        n.trees = 500)
+  yhat<-predict(model_adaboost, test_data)
+  print(paste0('MAE (model_adaboost): ' , (mae(test_data$int_rate, yhat)*100))) # MAE (model_adaboost): 3.5288
+  mse<-mean((yhat-test_data$int_rate)^2)
+  print(paste0('MSE (model_adaboost): ' , (mse*100))) # MSE (model_adaboost): 0.2054
+}
+
+prepare_data()
+reg_adaboost()
 
 
 # XG-Boost
+# TODO !!!
