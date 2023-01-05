@@ -841,6 +841,11 @@ df_selection = subset(df_selection, select = -c(
   home_ownership_MORTGAGE
 ))
 
+# has_wrong_doing correlates with months_since_bad_situation, we drop has_wrong_doing because it's jsut a flag
+df_selection = subset(df_selection, select = -c(
+  has_wrong_doing
+))
+
 # our engineer featured months_since_bad_situation is better but correlated with mths_since_last_major_derog and mths_since_last_record - we drop latter two
 df_selection = subset(df_selection, select = -c(
   mths_since_last_major_derog,
@@ -943,14 +948,14 @@ reg_tree()
 #---------------------------------------------------------------------------
 
 reg_random_forest<-function() {
-  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = NULL, mtry=7, ntree = 200)
+  model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = NULL, mtry=7, ntree = 120)
   yhat<-predict(model_random_forest, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
   print(paste0('MAE (model_random_forest): ' , mae))
   print(paste0('MSE (model_random_forest): ' , mse))
 }
-# reg_random_forest() - slow
+reg_random_forest() # slow !
 
 # "MAE (model_random_forest): 3.31225578804117"
 # "MSE (model_random_forest): 18.3619827351034"
@@ -967,7 +972,7 @@ reg_adaboost<-function () {
                         cv.folds = 10,
                         shrinkage = .01,
                         n.minobsinnode = 10,
-                        n.trees = 140)
+                        n.trees = 120)
   yhat<-predict(model_adaboost, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
@@ -998,7 +1003,7 @@ reg_xgboost<-function() {
     max.depth = 10,
     eta = 0.3,
     nthread = 2,
-    nrounds = 100,
+    nrounds = 120,
     objective = "reg:squarederror",
     verbose = 0
   )
