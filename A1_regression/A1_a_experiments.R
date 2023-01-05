@@ -749,6 +749,51 @@ describe_feature(df$good_employment, "Good Employment") # -0.081 correlation
 
 
 # =====================================================================
+# FEATURE ENGINEERING ON TEXT FEATURES (NLP)
+# =====================================================================
+
+nlp_experiment<-function() {
+  #NLP empl_title variable
+  NLP<-VCorpus(VectorSource(df_nlp$emp_title))
+  NLP<-tm_map(NLP,content_transformer(tolower))
+  NLP<-tm_map(NLP,removeNumbers)
+  NLP<-tm_map(NLP,removePunctuation)
+  NLP<-tm_map(NLP,removeWords,stopwords())
+  NLP<-tm_map(NLP,stemDocument, language = c("english")) 
+  NLP<-tm_map(NLP,stripWhitespace) 
+  NLP_m<-DocumentTermMatrix(NLP)
+  NLP_m1<-removeSparseTerms(NLP_m, 0.999)
+  NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
+  NLP_dataset$int_rate<-df_int_rate$int_rate
+  cor(NLP_dataset$int_rate,NLP_dataset)
+  
+  #Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
+  NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
+  NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
+  
+  #NLP desc
+  
+  NLP_desc<-VCorpus(VectorSource(df_nlp$desc))
+  NLP_desc<-tm_map(NLP_desc,content_transformer(tolower))
+  NLP_desc<-tm_map(NLP_desc,removeNumbers)
+  NLP_desc<-tm_map(NLP_desc,removePunctuation)
+  NLP_desc<-tm_map(NLP_desc,removeWords,stopwords())
+  NLP_desc<-tm_map(NLP_desc,stemDocument, language = c("english")) 
+  NLP_desc<-tm_map(NLP_desc,stripWhitespace) 
+  NLP_m_desc<-DocumentTermMatrix(NLP_desc)
+  NLP_desc1<-removeSparseTerms(NLP_m_desc, 0.999)
+  NLP_desc_dataset<-as.data.frame(as.matrix(NLP_desc1))
+  NLP_desc_dataset$int_rate<-df_int_rate$int_rate
+  cor(NLP_desc_dataset$int_rate,NLP_desc_dataset)
+  Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
+  summary(Base_model)
+  # in my opinion it is a bit redundant if we consider that we have also purpose, but may be some pattern also here
+}
+#nlp_experiment()  # uncomment to run the NLP experiment that we tried
+
+
+
+# =====================================================================
 # FEATURE SELECTION
 # =====================================================================
 
@@ -796,51 +841,29 @@ df_selection<-df[, c(
 # Step (2) -- correlation matrix so we can exclude highly dependent variables
 corrplot(cor(df_selection))
 
+# drop home_ownership_MORTGAGE which is strongly negatively correlated with home_ownership_RENT (and rent is slightly better predictor)
+df_selection = subset(df_selection, select = -c(
+  home_ownership_MORTGAGE
+))
 
-# =====================================================================
-# FEATURE ENGINEERING ON TEXT FEATURES (NLP)
-# =====================================================================
+# drop revol_bal which is correlated with loan_amnt (and loan_amnt is slightly better predictor)
+df_selection = subset(df_selection, select = -c(
+  revol_bal
+))
 
-nlp_exeriment<-function() {
-  #NLP empl_title variable
-  NLP<-VCorpus(VectorSource(df_nlp$emp_title))
-  NLP<-tm_map(NLP,content_transformer(tolower))
-  NLP<-tm_map(NLP,removeNumbers)
-  NLP<-tm_map(NLP,removePunctuation)
-  NLP<-tm_map(NLP,removeWords,stopwords())
-  NLP<-tm_map(NLP,stemDocument, language = c("english")) 
-  NLP<-tm_map(NLP,stripWhitespace) 
-  NLP_m<-DocumentTermMatrix(NLP)
-  NLP_m1<-removeSparseTerms(NLP_m, 0.999)
-  NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
-  NLP_dataset$int_rate<-df_int_rate$int_rate
-  cor(NLP_dataset$int_rate,NLP_dataset)
-  
-  #Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
-  NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
-  NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
-  
-  #NLP desc
-  
-  NLP_desc<-VCorpus(VectorSource(df_nlp$desc))
-  NLP_desc<-tm_map(NLP_desc,content_transformer(tolower))
-  NLP_desc<-tm_map(NLP_desc,removeNumbers)
-  NLP_desc<-tm_map(NLP_desc,removePunctuation)
-  NLP_desc<-tm_map(NLP_desc,removeWords,stopwords())
-  NLP_desc<-tm_map(NLP_desc,stemDocument, language = c("english")) 
-  NLP_desc<-tm_map(NLP_desc,stripWhitespace) 
-  NLP_m_desc<-DocumentTermMatrix(NLP_desc)
-  NLP_desc1<-removeSparseTerms(NLP_m_desc, 0.999)
-  NLP_desc_dataset<-as.data.frame(as.matrix(NLP_desc1))
-  NLP_desc_dataset$int_rate<-df_int_rate$int_rate
-  cor(NLP_desc_dataset$int_rate,NLP_desc_dataset)
-  Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
-  summary(Base_model)
-  # in my opinion it is a bit redundant if we consider that we have also purpose, but may be some pattern also here
-}
-#nlp_exeriment()  # uncomment to run the NLP experiment that we tried
+# our engineer featured months_since_bad_situation is better but correlated with mths_since_last_major_derog and mths_since_last_delinq - we drop latter two
+df_selection = subset(df_selection, select = -c(
+  mths_since_last_major_derog,
+  mths_since_last_delinq
+))
 
+# drop pub_rec which is correlated with mths_since_last_record and latter is slightly better predictor
+df_selection = subset(df_selection, select = -c(
+  pub_rec
+))
 
+# we are rasonable happy now wiht (1) and (2) !
+corrplot(cor(df_selection))
 
 
 
@@ -849,34 +872,15 @@ nlp_exeriment<-function() {
 # =====================================================================
 
 
-# train split (choose the number of raw by changing the percentage in the row_train)
-variables_for_prediction<-df[, c(
-                               "Class_Income",
-                               "emp_length2",
-                               "total_acc",
-                               "revol_bal",
-                               "tot_cur_bal",
-                               "purpose_car",
-                               "Good_employment",
-                               "inq_last_6mths",
-                               "revol_util",
-                               "Loan_to_Wealth_index",
-                               "verification_status_Not Verified",
-                               "declared_dti",
-                               "Has_something_wrong_done",
-                               "purpose_credit_card",
-                               "purpose_debt_consolidation",
-                               "purpose_house",
-                               "purpose_medical",
-                               "purpose_moving",
-                               "purpose_other",
-                               "purpose_small_business",
-                               "int_rate"
-                             )]
-nrow_train<-round(nrow(variables_for_prediction)*0.75,0)
-Train_data<-variables_for_prediction[0:nrow_train,]
-Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction),]
+# copy the int_rates back to selection df before we split
+df_selection$int_rate<-df_int_rate[, c("int_rate")]
 
+
+# create test and train splits of the data
+split<-0.2
+cuttoff=round(nrow(df_selection)*split)
+train_data<-df_selection[0:cuttoff,]
+test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 
 
 
@@ -884,36 +888,34 @@ Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction
 # COMPARE DIFFERENT REGRESSION MODELS
 # =====================================================================
 
-# Multiple Linear regression
-Linear_regression<- lm(int_rate~.,data=Train_data)
-Linear_regression_prediction<-predict(Linear_regression,Test_data)
-print(paste0('MAE: ' , mae(Test_data$int_rate,Linear_regression_prediction)))
-summary(Linear_regression)
-vif(Base_model)
+# Multiple Linear Regression
+model_linear<-lm(int_rate~., data=train_data)
+model_linear_prediction<-predict(model_linear,test_data)
+print(paste0('MAE (model_linear): ' , (mae(test_data$int_rate,model_linear_prediction)*100))) # MAE (model_linear): 3.8356
+summary(model_linear)
 
 
-# Regression tree
-Regression_tree <- rpart(int_rate ~., data=Train_data, control=rpart.control(cp=.0001))
-Regression_tree_prediction<-predict(Regression_tree,Test_data)
-print(paste0('MAE: ' , mae(Test_data$int_rate,Regression_tree_prediction)))
+# Regression Tree
+model_regression_tree<-rpart(int_rate~., data=train_data, control=rpart.control(cp=.0001))
+model_regression_tree_prediction<-predict(model_regression_tree, test_data)
+print(paste0('MAE (model_regression_tree): ' , (mae(test_data$int_rate, model_regression_tree_prediction)*100))) # MAE (model_regression_tree): 3.2930
 
 
 # Random Forest
-random_forest <- randomForest(int_rate~., data=Train_data, maxnodes = 100, mtry=10, ntree = 200 )
-random_forest_prediction<-predict(random_forest,Test_data)
-print(paste0('MAE: ' , mae(Test_data$int_rate,random_forest_prediction)))
+model_random_forest<-randomForest(int_rate~., data=train_data, maxnodes = 100, mtry=10, ntree = 200)
+model_random_forest_prediction<-predict(model_random_forest, test_data)
+print(paste0('MAE (model_random_forest): ' , (mae(test_data$int_rate, model_random_forest_prediction)*100))) # MAE (model_random_forest): 3.3099
+
 
 # AdaBoost
-model_adaboost <- gbm(int_rate ~.,data = Train_data,
+model_adaboost <- gbm(int_rate~., data=train_data,
                       distribution = "gaussian",
                       cv.folds = 10,
                       shrinkage = .01,
                       n.minobsinnode = 10,
                       n.trees = 500)
-model_adaboost_prediction<-predict(model_adaboost ,Test_data)
-print(paste0('MAE: ' , mae(Test_data$int_rate,model_adaboost_prediction)))
+model_adaboost_prediction<-predict(model_adaboost, test_data)
+print(paste0('MAE (model_adaboost): ' , (mae(test_data$int_rate, model_adaboost_prediction)*100))) # MAE (model_adaboost): 3.5310
 
 
-# Multiple linear regression tree
-
-# XgBoost
+# XG-Boost
