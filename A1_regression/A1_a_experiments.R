@@ -138,7 +138,7 @@ df = subset(df, select = -c(
 # =====================================================================
 
 # create the NLP dataframe
-df_nlp<-df[,c("title","emp_title","desc")]
+df_nlp<-df[,c("title", "emp_title", "desc")]
 
 # remove string attributes from the main dataframe (we can copy back later interesting attributes from NLP frame after processing - our main dataframe should be purely numeric!)
 df = subset(df, select = -c(
@@ -156,7 +156,7 @@ df = subset(df, select = -c(
 # print basic description of data frame
 dim(df)    # we have 49 attributes (incl. target) left after initial selection and ~798K observations
 skim(df)
-View(df)
+#View(df) # uncomment to open the table view of the df
 
 # we need to filter for numeric variables to use corrplot and also handle NAs first...
 # corrplot(df)
@@ -360,38 +360,6 @@ skim(df_outliers)
 # ...
 
 
-# Features that are possibly dependent on each other
-# --------------------------------------------------------------------
-
-# loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
-# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount but
-# drop the other two amount attributes!
-describe_feature(df$loan_amnt, "Loan Amount")
-describe_feature(df$funded_amnt, "Funded Amount")
-describe_feature(df$funded_amnt_inv, "Funded Invested Amount")
-
-cor(df$loan_amnt, df$funded_amnt)        # correlation: 0.9992714 between loan and funded amount
-cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339 between loan and funded by investors amount
-df = subset(df, select = -c(
-  funded_amnt,
-  funded_amnt_inv
-))
-
-# opened installment accounts (current, past 12 months, past 24 months)
-# because if any was opened in past 6 months, it will also be included in 12 and 24 months. 6 month shows strongest correlation with target,
-# thus we finally drop the 12m and 24m attributes
-describe_feature(df$open_il_6m, "Current Installment Accounts")
-describe_feature(df$open_il_12m, "Installment Accounts 12 months")
-describe_feature(df$open_il_24m, "Installment Accounts 24 months")
-cor(handle_na(df$open_il_6m), handle_na(df$open_il_12m))   # correlation: 0.57 between 6m and 12m
-cor(handle_na(df$open_il_6m), handle_na(df$open_il_24m))   # correlation: 0.67 between 6m and 24m
-cor(handle_na(df$open_il_12m), handle_na(df$open_il_24m))  # correlation: 0.85 between 12m and 24m
-df = subset(df, select = -c(
-  open_il_12m,
-  open_il_24m
-))
-
-
 
 # Categorical features
 # --------------------------------------------------------------------
@@ -407,44 +375,60 @@ df = subset(df, select = -c(
 ))
 
 
+
 # Dummy variables for categorical features
 # --------------------------------------------------------------------
 
 # create separate df with dummy variables for some of the categorical string attributes
+df$verification_status_combined<-ifelse(df$verification_status_joint != '', df$verification_status_joint, df$verification_status) # combine verification status
+df = subset(df, select = -c(
+  verification_status,
+  verification_status_joint
+))
+
+
 df_dummies<-df
 numcol<-ncol(df_dummies)
-df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status", "purpose", "home_ownership", "addr_state"))
+df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status_combined", "purpose", "home_ownership", "addr_state"))
 df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
-View(df_dummies)
+#View(df_dummies) # uncomment to open the table view of the df
 
 # here we compute the correlations with target variable for each of the dummy variables and sort them descending by absolute value
 # (either strongly negative or strongly positive correlated on top). 
-z<-cor(df$int_rate,df_dummies)
+z<-cor(df$int_rate, df_dummies)
 z[z == 1] <- NA #drop perfect
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
 
 # based on theses correlations, it seems the following dummy vars seem interesting tp pursue further!
 #
-# verification_status_Not Verified -0.21797238
-#     verification_status_Verified  0.21077114
-#              purpose_credit_card -0.18464138
-#            initial_list_status_f  0.115002437
-#            initial_list_status_w -0.115002437
-#       purpose_debt_consolidation  0.09647653
-#                    purpose_other  0.09198582
-#           purpose_small_business  0.07394402
-#          home_ownership_MORTGAGE -0.06152897
-#              home_ownership_RENT  0.06176908
+#1   1    verification_status_combined_Not Verified -2.178569e-01
+#3   1        verification_status_combined_Verified  2.106720e-01
+#5   1                          purpose_credit_card -1.846414e-01
+#6   1                   purpose_debt_consolidation  9.647653e-02
+#13  1                                purpose_other  9.198582e-02
+#15  1                       purpose_small_business  7.394402e-02
+#23  1                          home_ownership_RENT  6.176908e-02
+#19  1                      home_ownership_MORTGAGE -6.152897e-02
+#12  1                               purpose_moving  4.402282e-02
+#9   1                                purpose_house  4.061277e-02
+#11  1                              purpose_medical  3.030260e-02
+#4   1                                  purpose_car -2.892246e-02
+#43  1                                addr_state_MA -2.033319e-02
+#10  1                       purpose_major_purchase -1.813078e-02
+#16  1                             purpose_vacation  1.807930e-02
+#25  1                                addr_state_AL  1.289503e-02
+#8   1                     purpose_home_improvement -1.209862e-02
+#14  1                     purpose_renewable_energy  1.188388e-02
+#35  1                                addr_state_HI  1.105064e-02
+#17  1                              purpose_wedding  1.082496e-02
+#66  1                                addr_state_TN  9.213030e-03
 
 # copy home ownership RENT and MORTGAGE dummies to main df
 df$home_ownership_RENT<-df_dummies$home_ownership_RENT
 describe_feature(df$home_ownership_RENT, "Home (Rent)") # 0.062 correlation
 df$home_ownership_MORTGAGE<-df_dummies$home_ownership_MORTGAGE
 describe_feature(df$home_ownership_MORTGAGE, "Home (Mortgage)") # -0.062 correlation
-df = subset(df, select = -c(
-  home_ownership
-))
 
 # emp_length --> is coded as string such as "3 years" or "< 1 year" and needs conversion to numeric space
 df$emp_length<-handle_empt_length(df$emp_length)
@@ -464,32 +448,86 @@ df = subset(df, select = -c(
 
 # create a separate feature "good states" for the states that have neg. correlation coeff with the target
 # variable (this worked better as group rather than using dummy encoded states individually)
-df$good_states<-handle_states(df)
+df$good_states<-handle_states(df_raw)
 describe_feature(df$good_states, "Good States") #-0.029 correlation
-df = subset(df, select = -c(
-  addr_state
-))
-View(df)
-
 
 # initial_list_status (w/f) -> encode as 0/a
 df$initial_list_status<-replace(df$initial_list_status, df$initial_list_status == 'w', 0)
 df$initial_list_status<-replace(df$initial_list_status, df$initial_list_status == 'f', 1)
 df$initial_list_status<-as.numeric(df$initial_list_status)
-describe_feature(df$initial_list_status, "Initial List Statis") # 0.115 correlation
+describe_feature(df$initial_list_status, "Initial list status") # 0.115 correlation
+
+
+# initial_list_status (w/f) -> encode as 0/a
+df$application_type<-replace(df$application_type, df$application_type == 'INDIVIDUAL', 0)
+df$application_type<-replace(df$application_type, df$application_type == 'JOINT', 1)
+df$application_type<-as.numeric(df$application_type)
+describe_feature(df$application_type, "Applcation type") # 0.010 correlation
+
+
+# drop the categorical features from the original df
+df = subset(df, select = -c(
+  verification_status_combined,
+  purpose,
+  home_ownership,
+  addr_state
+))
 
 
 # Numeric features
 # --------------------------------------------------------------------
 
+# loan amount is the amount requested by the borrowers, while funded amounts are what investors committed and what was finally borrowed
+# so we believe funded amounts data will actually only be available after the interest rate was computed. Thus we keep the loan_amount but
+# drop the other two amount attributes!
+describe_feature(df$loan_amnt, "Loan Amount")
+describe_feature(df$funded_amnt, "Funded Amount")
+describe_feature(df$funded_amnt_inv, "Funded Invested Amount")
+
+cor(df$loan_amnt, df$funded_amnt)        # correlation: 0.9992714 between loan and funded amount
+cor(df$loan_amnt, df$funded_amnt_inv)    # correlation: 0.9971339 between loan and funded by investors amount
+df = subset(df, select = -c(
+  funded_amnt,
+  funded_amnt_inv
+))
+
+
+# opened installment accounts (current, past 12 months, past 24 months)
+# because if any was opened in past 6 months, it will also be included in 12 and 24 months. 6 month shows strongest correlation with target,
+# thus we finally drop the 12m and 24m attributes
+describe_feature(df$open_il_6m, "Current Installment Accounts")
+describe_feature(df$open_il_12m, "Installment Accounts 12 months")
+describe_feature(df$open_il_24m, "Installment Accounts 24 months")
+df$open_il_6m<-handle_na(df$open_il_6m)
+df$open_il_12m<-handle_na(df$open_il_12m)
+df$open_il_24m<-handle_na(df$open_il_24m)
+cor(df$open_il_6m, df$open_il_12m)   # correlation: 0.57 between 6m and 12m
+cor(df$open_il_6m, df$open_il_24m)   # correlation: 0.67 between 6m and 24m
+cor(df$open_il_12m, df$open_il_24m)  # correlation: 0.85 between 12m and 24m
+df = subset(df, select = -c(
+  open_il_12m,
+  open_il_24m
+))
+
+
 # annual_inc
 # (!) missing values should refer to 0 income people: according to dataset documentation these are usually students
 # or people that do not have an employment descrition. However doesn't impact the type of replacement because there are 4 in total.
-describe_feature(df$annual_inc, "Annual Income") # -0.073 correlation
 df$annual_inc<-handle_na(df$annual_inc)
-df$annual_inc<-apply_threshold(df$annual_inc, threshold = 157500) # applying 1.5*IRQ method: Q3 + 1.5 * (Q3 - Q1) = 90K + 1.5 * (90K - 45K) = 157500
-describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.11 correlation
+df$annual_inc_joint<-handle_na(df$annual_inc_joint)
 
+describe_feature(df$annual_inc, "Annual Income")
+describe_feature(df$annual_inc_joint, "Annual Income (joint)")
+
+df$annual_inc_combined<-ifelse(df$application_type==1, df$annual_inc_joint, df$annual_inc) # merge joint income onto income column
+describe_feature(df$annual_inc_combined, "Annual Income (combined)") # -0.073 correlation
+df$annual_inc_combined<-apply_threshold(df$annual_inc_combined, threshold = 112500) # applying 1.5*IRQ 
+describe_feature(df$annual_inc_combined, "Annual Income (combined, thresholded)") # -0.11 correlation
+
+df = subset(df, select = -c(
+  annual_inc,
+  annual_inc_joint
+))
 
 # dti
 describe_feature(df$dti, "DTI") # has outliers, 0.077 correlation
@@ -514,6 +552,9 @@ df = subset(df, select = -c(
 df$earliest_cr_line<-as.numeric(substr(df$earliest_cr_line, 5, 8))
 describe_feature(df$delinq_2yrs, "Earliest CR Line") # 0.055 correlation
 
+# last_credit_pull_d, format is Apr-1955, simply convert to year by taking substring of last 4 chars
+df$last_credit_pull_d<-as.numeric(substr(df$last_credit_pull_d, 5, 8)) 
+describe_feature(df$last_credit_pull_d, "Last credit pull date") # 0.001 correlation
 
 # delinq_2yrs --> <0.01% missing values
 describe_feature(df$delinq_2yrs, "Delinquencies 2 years") # 0.055 correlation
@@ -548,11 +589,6 @@ df = subset(df, select = -c(
 describe_feature(df$inq_fi, "Inquries 'FI'") # 0.002 correlation
 df$inq_fi<-replace_na(df$inq_fi,0)
 
-# we drop inq_fi
-df = subset(df, select = -c(
-  inq_fi
-))
-
 
 # mths_since_last_delinq --> 51% missing values
 describe_feature(df$mths_since_last_delinq, "Months since last deliquency") # 0.046 correlation
@@ -571,6 +607,17 @@ df$open_acc<-handle_na(df$open_acc)
 df$open_acc<-apply_threshold(df$open_acc, threshold = 17) # threshold 1.5*IRQ
 describe_feature(df$open_acc, "Open Account (tresholded)") # -0.013 correlation (still weak)
 
+# open_acc_6m
+describe_feature(df$open_acc_6m, "Open Account 6 months") # many outliers, -0.002 correlation
+df$open_acc_6m<-handle_na(df$open_acc_6m)
+
+# tot_coll_amt
+describe_feature(df$tot_coll_amt, "Total collection amout") # many outliers, -0.001 correlation
+df$tot_coll_amt<-handle_na(df$tot_coll_amt)
+
+# tot_cur_bal
+describe_feature(df$tot_cur_bal, "Total current balance") # many outliers, -0.075 correlation
+df$tot_cur_bal<-handle_na(df$tot_cur_bal)
 
 # pub_rec
 describe_feature(df$pub_rec, "Public Record") # many outliers, -0.011 correlation
@@ -634,6 +681,25 @@ df = subset(df, select = -c(
 # acc_now_delinq
 describe_feature(df$acc_now_delinq, "Account now delinquent") # 0.026 correlation
 df$acc_now_delinq<-handle_na(df$acc_now_delinq)
+
+
+
+#df$tot_coll_amt
+
+
+
+
+# show summary of the df after feature handling
+skim(df)
+
+# plot a correlation matrix
+corrplot(as.numeric(df), method="circle")
+
+
+
+
+
+
 
 
 
@@ -751,7 +817,12 @@ nrow_train<-round(nrow(variables_for_prediction)*0.75,0)
 Train_data<-variables_for_prediction[0:nrow_train,]
 Test_data<-variables_for_prediction[(nrow_train+1):nrow(variables_for_prediction),]
 
-# Models
+
+
+
+# =====================================================================
+# COMPARE DIFFERENT REGRESSION MODELS
+# =====================================================================
 
 # Multiple Linear regression
 Linear_regression<- lm(int_rate~.,data=Train_data)
@@ -760,19 +831,19 @@ print(paste0('MAE: ' , mae(Test_data$int_rate,Linear_regression_prediction)))
 summary(Linear_regression)
 vif(Base_model)
 
-#Regression tree
 
+# Regression tree
 Regression_tree <- rpart(int_rate ~., data=Train_data, control=rpart.control(cp=.0001))
 Regression_tree_prediction<-predict(Regression_tree,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,Regression_tree_prediction)))
 
-# Random Forest
 
+# Random Forest
 random_forest <- randomForest(int_rate~., data=Train_data, maxnodes = 100, mtry=10, ntree = 200 )
 random_forest_prediction<-predict(random_forest,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,random_forest_prediction)))
 
-#AdaBoost
+# AdaBoost
 model_adaboost <- gbm(int_rate ~.,data = Train_data,
                       distribution = "gaussian",
                       cv.folds = 10,
@@ -782,5 +853,7 @@ model_adaboost <- gbm(int_rate ~.,data = Train_data,
 model_adaboost_prediction<-predict(model_adaboost ,Test_data)
 print(paste0('MAE: ' , mae(Test_data$int_rate,model_adaboost_prediction)))
 
+
 # Multiple linear regression tree
 
+# XgBoost
