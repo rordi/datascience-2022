@@ -996,7 +996,7 @@ reg_xgboost<-function() {
     data = train_data_matrix,
     label = labels_vector,
     max.depth = 10,
-    eta = 0.18,
+    eta = 0.3,
     nthread = 2,
     nrounds = 100,
     objective = "reg:squarederror",
