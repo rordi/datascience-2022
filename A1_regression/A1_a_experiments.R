@@ -802,50 +802,51 @@ corrplot(cor(df_selection))
 # =====================================================================
 
 nlp_exeriment<-function() {
+  #NLP empl_title variable
+  NLP<-VCorpus(VectorSource(df_nlp$emp_title))
+  NLP<-tm_map(NLP,content_transformer(tolower))
+  NLP<-tm_map(NLP,removeNumbers)
+  NLP<-tm_map(NLP,removePunctuation)
+  NLP<-tm_map(NLP,removeWords,stopwords())
+  NLP<-tm_map(NLP,stemDocument, language = c("english")) 
+  NLP<-tm_map(NLP,stripWhitespace) 
+  NLP_m<-DocumentTermMatrix(NLP)
+  NLP_m1<-removeSparseTerms(NLP_m, 0.999)
+  NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
+  NLP_dataset$int_rate<-df_int_rate$int_rate
+  cor(NLP_dataset$int_rate,NLP_dataset)
   
+  #Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
+  NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
+  NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
+  
+  #NLP desc
+  
+  NLP_desc<-VCorpus(VectorSource(df_nlp$desc))
+  NLP_desc<-tm_map(NLP_desc,content_transformer(tolower))
+  NLP_desc<-tm_map(NLP_desc,removeNumbers)
+  NLP_desc<-tm_map(NLP_desc,removePunctuation)
+  NLP_desc<-tm_map(NLP_desc,removeWords,stopwords())
+  NLP_desc<-tm_map(NLP_desc,stemDocument, language = c("english")) 
+  NLP_desc<-tm_map(NLP_desc,stripWhitespace) 
+  NLP_m_desc<-DocumentTermMatrix(NLP_desc)
+  NLP_desc1<-removeSparseTerms(NLP_m_desc, 0.999)
+  NLP_desc_dataset<-as.data.frame(as.matrix(NLP_desc1))
+  NLP_desc_dataset$int_rate<-df_int_rate$int_rate
+  cor(NLP_desc_dataset$int_rate,NLP_desc_dataset)
+  Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
+  summary(Base_model)
+  # in my opinion it is a bit redundant if we consider that we have also purpose, but may be some pattern also here
 }
-
-#NLP empl_title variable
-NLP<-VCorpus(VectorSource(df_nlp$emp_title))
-NLP<-tm_map(NLP,content_transformer(tolower))
-NLP<-tm_map(NLP,removeNumbers)
-NLP<-tm_map(NLP,removePunctuation)
-NLP<-tm_map(NLP,removeWords,stopwords())
-NLP<-tm_map(NLP,stemDocument, language = c("english")) 
-NLP<-tm_map(NLP,stripWhitespace) 
-NLP_m<-DocumentTermMatrix(NLP)
-NLP_m1<-removeSparseTerms(NLP_m, 0.999)
-NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
-NLP_dataset$int_rate<-df_int_rate$int_rate
-cor(NLP_dataset$int_rate,NLP_dataset)
-
-#Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
-NLP_dataset$Good_employement<-NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project+NLP_dataset$system
-NLP_dataset$Good_employement2<-ifelse(NLP_dataset$engin+NLP_dataset$director+NLP_dataset$senior+NLP_dataset$manag+NLP_dataset$presid+NLP_dataset$analyst+NLP_dataset$project>=1,1,0)
-
-#NLP desc
-
-NLP_desc<-VCorpus(VectorSource(df_nlp$desc))
-NLP_desc<-tm_map(NLP_desc,content_transformer(tolower))
-NLP_desc<-tm_map(NLP_desc,removeNumbers)
-NLP_desc<-tm_map(NLP_desc,removePunctuation)
-NLP_desc<-tm_map(NLP_desc,removeWords,stopwords())
-NLP_desc<-tm_map(NLP_desc,stemDocument, language = c("english")) 
-NLP_desc<-tm_map(NLP_desc,stripWhitespace) 
-NLP_m_desc<-DocumentTermMatrix(NLP_desc)
-NLP_desc1<-removeSparseTerms(NLP_m_desc, 0.999)
-NLP_desc_dataset<-as.data.frame(as.matrix(NLP_desc1))
-NLP_desc_dataset$int_rate<-df_int_rate$int_rate
-cor(NLP_desc_dataset$int_rate,NLP_desc_dataset)
-Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
-summary(Base_model)
-# in my opinion it is a bit redundant if we consider that we have also purpose, but may be some pattern also here
+#nlp_exeriment()  # uncomment to run the NLP experiment that we tried
 
 
 
 
 
-
+# =====================================================================
+# REGRESSION MODEL SELECTION
+# =====================================================================
 
 
 # train split (choose the number of raw by changing the percentage in the row_train)
