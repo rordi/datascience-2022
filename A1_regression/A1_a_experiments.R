@@ -5,8 +5,9 @@
 # Group A2
 # Dietrich Rordorf, Marco Lecci, Sarah Castratori
 #
-# This script is used to preprocess the raw data from CSV to a useable
-# state.
+# This script was used to preprocess the raw data from CSV to a usable
+# state, do some feature selection and feature engineering, and experiment
+# with different regression models.
 #
 # =====================================================================
 
@@ -19,27 +20,31 @@
 # clear envionrment
 rm(list=ls())
 
-# allow for reproducible results
+# allow for reproducible results by setting seed = 1. We can also change the seed and run
+# the script a few times to see if the regression model is robust.
 set.seed(1)
 
 # set memory limit: this works only on Windows (you can copy-paste the below commented-out command into console and run it there)
 # memory.limit(700000)
 
-# install package dependencies
-install.packages("corrplot")
-install.packages("dplyr")
-install.packages("scales")
-install.packages("data.table")
-install.packages("skimr")
-install.packages("fastDummies")
-install.packages("car")
-install.packages("tm")
-install.packages("SnowballC")
-install.packages("randomForest")
-install.packages("reshape")
-install.packages("Metrics")
-install.packages("caret")
-install.packages("gbm")
+# install other package dependencies
+install_packages_regression<-function() {
+  install.packages("corrplot")
+  install.packages("dplyr")
+  install.packages("scales")
+  install.packages("data.table")
+  install.packages("skimr")
+  install.packages("fastDummies")
+  install.packages("car")
+  install.packages("tm")
+  install.packages("SnowballC")
+  install.packages("randomForest")
+  install.packages("reshape")
+  install.packages("Metrics")
+  install.packages("caret")
+  install.packages("gbm")
+}
+#install_packages_regression() # uncomment when running first time!
 
 # load packages
 library("corrplot")
@@ -73,6 +78,11 @@ library('gbm')
 
 # load raw data from csv into data frame
 df_raw <- fread("./A1_regression/LCdata.csv", sep=";")
+
+# first we randomize the order in the dataframe before doing anything else (we do not know how random the order is in the CSV)!
+df_raw[sample(1:nrow(df_raw)), ]
+
+# copy the raw data in df, which will be our working copy
 df<-df_raw
 
 
@@ -81,7 +91,8 @@ df<-df_raw
 # PURGE IRRELEVANT ATTRIBUTES
 # =====================================================================
 
-# drop attributes that are not present for new applicants / in unseen data - list provided by Gwen
+# drop attributes that are not present for new applicants / in unseen data -
+# this is a list of attributes that was provided by Gwen in class
 df = subset(df, select = -c(
   collection_recovery_fee,
   installment,
@@ -109,7 +120,9 @@ df = subset(df, select = -c(
   url             # the url contains the id, only providing an order in which the applications were saved into the database otherwise meaningless
 ))
 
-# drop attributes that have no description in the data dictionary (it is uncertain what exactly it is!) @TODO - commented out, Marco found that some are useful
+
+# drop attributes that have no description in the data dictionary (it is uncertain what exactly it is). However, based 
+# on experiments Marco found that some are still useful, so commented this out again and keep these attributes
 #df = subset(df, select = -c(
 #  verification_status,        # could be is_inc_v but not certain
 #  verification_status_joint   # could be verified_status_joint but not certain
@@ -141,9 +154,7 @@ df = subset(df, select = -c(
 # =====================================================================
 
 # print basic description of data frame
-dim(df)    # we have 49 variables left after inital selection and ~798K observations
-str(df)
-glimpse(df)
+dim(df)    # we have 49 attributes (incl. target) left after initial selection and ~798K observations
 skim(df)
 View(df)
 
@@ -228,9 +239,14 @@ describe_feature <- function(feature, feature_name = "Feature") {
   # outliers detection (exclude null values as we have some very sparse attributes)
   outliers<-boxplot.stats(feature_handled)$out
   outliers_count<-length(outliers)
-  message(paste("Potential outliers (1.5 * IQR): ", outliers_count))
+  message(paste("Number of outliers (1.5*IQR method): ", outliers_count))
   if (outliers_count>0) {
-    message(paste("Potential outlier range of values: ", toString(range(outliers))))
+    # compute the threshold for outliers according to 1.5*IRQ meth
+    q1=quantile(feature_handled, 0.25, na.rm=TRUE)
+    q3=quantile(feature_handled, 0.75, na.rm=TRUE)
+    iqr=q3-q1
+    iqr_threshold=q1+1.5*iqr
+    message(paste("Threshold for outliers (1.5*IQR method): ", iqr_threshold))
   }
   
   # a deep-dive into the distribution
@@ -336,7 +352,8 @@ handle_empt_length<-function(feature) {
 # @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
 # also, Gwen mentioned in email that we need to scale the MSE to report back to the "customer"
 describe_feature(df$int_rate, "Interest Rate (%)")     # some 5667 outliers in the range 25.57 - 28.99
-df_outliers<-subset(df, df$int_rate >= 25.57)
+df$int_rate<-(df$int_rate/100) # scale percentage to numeric
+df_outliers<-subset(df, df$int_rate >= 0.2557)
 skim(df_outliers)
 
 # @TODO - we need to check if the interest rate is statistically significantly different between single and joint applications !! (no time - skipped)
@@ -375,6 +392,7 @@ df = subset(df, select = -c(
 ))
 
 
+
 # Categorical features
 # --------------------------------------------------------------------
 
@@ -389,13 +407,13 @@ df = subset(df, select = -c(
 ))
 
 
-# Dummy variables
+# Dummy variables for categorical features
 # --------------------------------------------------------------------
 
-# create separate df with dummy variables for some of the string attributes
+# create separate df with dummy variables for some of the categorical string attributes
 df_dummies<-df
 numcol<-ncol(df_dummies)
-df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status", "purpose","home_ownership","addr_state"))
+df_dummies<-dummy_cols(df_dummies, select_columns = c("verification_status", "purpose", "home_ownership", "addr_state"))
 df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
 View(df_dummies)
 
@@ -411,6 +429,8 @@ z[order(-abs(z$value)),] # sort
 # verification_status_Not Verified -0.21797238
 #     verification_status_Verified  0.21077114
 #              purpose_credit_card -0.18464138
+#            initial_list_status_f  0.115002437
+#            initial_list_status_w -0.115002437
 #       purpose_debt_consolidation  0.09647653
 #                    purpose_other  0.09198582
 #           purpose_small_business  0.07394402
@@ -419,9 +439,9 @@ z[order(-abs(z$value)),] # sort
 
 # copy home ownership RENT and MORTGAGE dummies to main df
 df$home_ownership_RENT<-df_dummies$home_ownership_RENT
-describe_feature(df$home_ownership_RENT, "Home (Rent)")
+describe_feature(df$home_ownership_RENT, "Home (Rent)") # 0.062 correlation
 df$home_ownership_MORTGAGE<-df_dummies$home_ownership_MORTGAGE
-describe_feature(df$home_ownership_MORTGAGE, "Home (Mortgage)")
+describe_feature(df$home_ownership_MORTGAGE, "Home (Mortgage)") # -0.062 correlation
 df = subset(df, select = -c(
   home_ownership
 ))
@@ -435,7 +455,7 @@ describe_feature(df$emp_length_numeric, "Employment Length")
 # last bin)
 df$emp_length_median<-df$emp_length_numeric
 df$emp_length_median[is.na(df$emp_length_median)]<-median(df$emp_length_median,na.rm=TRUE) # replace NAs with median
-describe_feature(df$emp_length_median, "Employment Length (median applied") # improves the correlation
+describe_feature(df$emp_length_median, "Employment Length (median applied)") # improves the correlation
 
 df = subset(df, select = -c(
   emp_length,
@@ -445,12 +465,22 @@ df = subset(df, select = -c(
 # create a separate feature "good states" for the states that have neg. correlation coeff with the target
 # variable (this worked better as group rather than using dummy encoded states individually)
 df$good_states<-handle_states(df)
-describe_feature(df$good_states, "Good States")
+describe_feature(df$good_states, "Good States") #-0.029 correlation
 df = subset(df, select = -c(
   addr_state
 ))
 View(df)
 
+
+# initial_list_status (w/f) -> encode as 0/a
+df$initial_list_status<-replace(df$initial_list_status, df$initial_list_status == 'w', 0)
+df$initial_list_status<-replace(df$initial_list_status, df$initial_list_status == 'f', 1)
+df$initial_list_status<-as.numeric(df$initial_list_status)
+describe_feature(df$initial_list_status, "Initial List Statis") # 0.115 correlation
+
+
+# Numeric features
+# --------------------------------------------------------------------
 
 # annual_inc
 # (!) missing values should refer to 0 income people: according to dataset documentation these are usually students
@@ -462,116 +492,157 @@ describe_feature(df$annual_inc, "Annual Income (thresholded)") # -0.11 correlati
 
 
 # dti
-describe_feature(df$dti, "DTI") # has outliers, threshold at 99.9% percentile (39.73) seems good
-df$dti<-apply_threshold(df$dti, threshold = 39.73) # produces nice bell.shaped curve --> replace NA with median in next step
-df$dti = handle_na(df$dti)
-describe_feature(df$dti, "DTI (thresholded)")
+describe_feature(df$dti, "DTI") # has outliers, 0.077 correlation
+df$dti<-handle_na(df$dti)
 
 # dti_joint
-df$dti_joint = handle_na(df$dti_joint)
-cor(df$int_rate,df$dti) # 7.7%
-
+describe_feature(df$dti_joint, "DTI Joint") # has outliers, 0.012 correlation
+df$dti_joint<-handle_na(df$dti_joint)
 
 # new feature: declared_dti (combining dti and dti_joint) --> declared_dti brings benefit, correlation increase from 7.7% to 16.4%.
-df$declared_dti<-ifelse(df$dti_joint==0,df$dti,df$dti_joint)
-cor(df$int_rate,df$declared_dti) # 16.4%
+df$declared_dti<-ifelse(df$dti_joint==0, df$dti, df$dti_joint)
+describe_feature(df$declared_dti, "Declared DTI") # after joining, only 1 outlier left, correlation  0.164
+
+# wee keep the new declared_dti feature and drop the original ones
+df = subset(df, select = -c(
+  dti,
+  dti_joint
+))
+
+
+# earliest_cr_line, format is Apr-1955, simply convert to year by taking substring of last 4 chars
+df$earliest_cr_line<-as.numeric(substr(df$earliest_cr_line, 5, 8))
+describe_feature(df$delinq_2yrs, "Earliest CR Line") # 0.055 correlation
+
 
 # delinq_2yrs --> <0.01% missing values
-df$delinq_2yrs<-replace_na(df$delinq_2yrs,0)
+describe_feature(df$delinq_2yrs, "Delinquencies 2 years") # 0.055 correlation
+df$delinq_2yrs<-handle_na(df$delinq_2yrs)
 
-#mths_since_last_delinq
-df$mths_since_last_delinq<-ifelse(df$delinq_2yrs==0,0,df$mths_since_last_delinq)
+
+# mths_since_last_delinq
+describe_feature(df$mths_since_last_delinq, "Months since last delinquency") # 0.046 correlation
 df$mths_since_last_delinq<-replace_na(df$mths_since_last_delinq,0)
-cor(df$int_rate,df$mths_since_last_delinq)
+
 
 # inq_last_6mths --> almost 50% of records have an entry, and seems a good indicator
-sum(is.na(df$inq_last_6mths))
+describe_feature(df$inq_last_6mths, "Inquries past 6 months") # 0.228 correlation
 df$inq_last_6mths<-replace_na(df$inq_last_6mths,0) # replace NA with 0
 df$inq_last_6mths<-abs(df$inq_last_6mths) # fix typing errors: negative values are not meaningful
-length(which(df$inq_last_6mths == 0))/length(df$inq_last_6mths) # 56% zero values (sparse attribute)
-cor(df$inq_last_6mths,df$int_rate) #22.8%
+
 
 # inq_last_12mths --> sparse attribute, weak correlation with int_rate
-sum(is.na(df$inq_last_12m))
+describe_feature(df$inq_last_12m, "Inquries past 12 months") # 0.012 correlation
 df$inq_last_12m<-replace_na(df$inq_last_12m,0) # replace NA with 0
 df$inq_last_12m<-abs(df$inq_last_12m) # fix typing errors: negative values are not meaningful
-length(which(df$inq_last_12m == 0))/length(df$inq_last_12m) # 98% zero values (sparse attribute)
 cor(df$inq_last_12m,df$int_rate) # -0.001%
 cor(df$inq_last_12m,df$inq_last_6mths) #0.03% (although they seem independent, each inq in past 6 months is also an inq in past 12 months thus the two have dependency)
 
-# we drop inq_last_12mths
+# we drop inq_last_12mths and inq_last_6mths is ma much better predictor
 df = subset(df, select = -c(
   inq_last_12m
 ))
 
+
 # inq_fi --> spare attribute, weak correlation
-sum(is.na(df$inq_last_12m))
+describe_feature(df$inq_fi, "Inquries 'FI'") # 0.002 correlation
 df$inq_fi<-replace_na(df$inq_fi,0)
-length(which(df$inq_fi == 0))/length(df$inq_fi) # 99% zero values (sparse attribute)
-cor(df$inq_fi, df$int_rate) # 0.002
 
 # we drop inq_fi
 df = subset(df, select = -c(
   inq_fi
 ))
 
+
 # mths_since_last_delinq --> 51% missing values
+describe_feature(df$mths_since_last_delinq, "Months since last deliquency") # 0.046 correlation
 df$mths_since_last_delinq[is.na(df$mths_since_last_delinq)]<-ifelse(df$delinq_2yrs==0,0,df$delinq_2yrs*12)
 cor(df$int_rate,df$mths_since_last_delinq)
 
+
 # mths_since_last_record --> 84% missing values
+describe_feature(df$mths_since_last_record, "Months since last record") # 0.061 correlation
 df$mths_since_last_record<-replace_na(df$mths_since_last_record,0)
-cor(df$int_rate,df$mths_since_last_record)
+
 
 # open_acc
+describe_feature(df$open_acc, "Open Account") # many outliers, -0.011 correlation
+df$open_acc<-handle_na(df$open_acc)
+df$open_acc<-apply_threshold(df$open_acc, threshold = 17) # threshold 1.5*IRQ
+describe_feature(df$open_acc, "Open Account (tresholded)") # -0.013 correlation (still weak)
+
 
 # pub_rec
-df$pub_rec<-replace_na(df$pub_rec,0)
+describe_feature(df$pub_rec, "Public Record") # many outliers, -0.011 correlation
+df$pub_rec<-handle_na(df$pub_rec)
 cor(df$int_rate,df$pub_rec)
 
-# revol_bal
-df$revol_bal<-replace_na(df$revol_bal,0)
-cor(df$int_rate,df$revol_bal)
 
-# revol_util (I investigated the NAs of the attribute but didn't find any explanation for the missing values. So I tried replacement with 0, mean and median, the latter had a slighly better correlation so I kept it.)
-df$revol_util[is.na(df$revol_util)] <- median(df$revol_util, na.rm = TRUE)
-cor(df$int_rate,df$revol_util)
+# revol_bal
+describe_feature(df$revol_bal, "Revolving Balance") # -0.036 correlation
+df$revol_bal<-handle_na(df$revol_bal)
+
+
+# revol_util (I investigated the NAs of the attribute but didn't find any explanation
+# for the missing values. So I tried replacement with 0, mean and median, the latter
+# had a slighly better correlation so I kept it.)
+describe_feature(df$revol_util, "Revolving Util") # 0.268 correlation
+df$revol_util<-apply_threshold(df$revol_util, threshold = 91.45) # threshold 1.5*IRQ
+df$revol_util<-handle_na(df$revol_util, median(df$revol_util, na.rm = TRUE))
+describe_feature(df$revol_util, "Revolving Util (thresholded, median)") # 0.269 correlation
+
 
 # total_acc
-df$total_acc[is.na(df$total_acc)] <- median(df$total_acc, na.rm = TRUE)
-cor(df$int_rate,df$total_acc)
+describe_feature(df$total_acc, "Total Account") # -0.039 correlation
+df$total_acc<-apply_threshold(df$total_acc, threshold = 39.5) # threshold 1.5*IRQ
+df$total_acc<-handle_na(df$total_acc, median(df$total_acc, na.rm = TRUE))
+describe_feature(df$total_acc, "Total Account (thresholded, median)") # -0.048 correlation
 
-# collections_12_mths_ex_med (Power Law distribution, make sense to replace it with 0, btw it is irrelevant)
-df$collections_12_mths_ex_med<-replace_na(df$collections_12_mths_ex_med,0)
-cor(df$int_rate,df$total_acc)
+
+# collections_12_mths_ex_med (Power Law distribution, make sense to replace it with 0)
+describe_feature(df$collections_12_mths_ex_med, "Collections past 12 months") # 0.013 correlation
+df$collections_12_mths_ex_med<-ifelse(df$collections_12_mths_ex_med>=1, 1, 0) # try convert to a binary flag
+cor(df$int_rate,df$collections_12_mths_ex_med) # 0.014 correlation, clightly better but still weak
+
 
 # mths_since_last_major_derog
-df$mths_since_last_major_derog<-replace_na(df$mths_since_last_major_derog,0)
+describe_feature(df$mths_since_last_major_derog, "Monsth since last mjr derogation") # 0.063 correlation
+df$mths_since_last_major_derog<-handle_na(df$mths_since_last_major_derog)
 cor(df$int_rate,df$mths_since_last_major_derog)
 
-#total_bal_il (irrelevant)
-df$total_bal_il<-replace_na(df$total_bal_il,0)
-cor(df$int_rate,df$total_bal_il)
 
-#all_util (irrelaevant)
-df$all_util<-replace_na(df$all_util,0)
-cor(df$int_rate,df$all_util)
+#total_bal_il
+describe_feature(df$total_bal_il, "Total Balance 'IL'") # -0.016 correlation
+df$total_bal_il<-handle_na(df$total_bal_il)
+
+
+#all_util
+describe_feature(df$total_bal_il, "All util") # -0.016 correlation
+df$all_util<-handle_na(df$all_util)
+
 
 # open_rv_12m, open_rv_24m --> drop, both are weak and sparse and interdependent
-describe_feature(df$open_rv_12m)
-describe_feature(df$open_rv_24m)
-cor(handle_na(df$open_rv_12m), handle_na(df$open_rv_24m))   # correlation: 0.87
+describe_feature(df$open_rv_12m, "Open RY 12 months") # -0.01 correlation
+describe_feature(df$open_rv_24m, "Open RY 24 months") # -0.01 correlation 
+cor(handle_na(df$open_rv_12m), handle_na(df$open_rv_24m)) # correlation (dependency): 0.87
 df = subset(df, select = -c(
   open_rv_12m,
   open_rv_24m
 ))
 
-#acc_now_delinq
-df$acc_now_delinq<-replace_na(df$acc_now_delinq,0)
-cor(df$int_rate,df$acc_now_delinq)
+
+# acc_now_delinq
+describe_feature(df$acc_now_delinq, "Account now delinquent") # 0.026 correlation
+df$acc_now_delinq<-handle_na(df$acc_now_delinq)
+
+
+
+# =====================================================================
+# FEATURE ENGINEERING ON TEXT FEATURES (NLP)
+# =====================================================================
+
 
 #NLP empl_title variable
-
 NLP<-VCorpus(VectorSource(df_nlp$emp_title))
 NLP<-tm_map(NLP,content_transformer(tolower))
 NLP<-tm_map(NLP,removeNumbers)
@@ -607,7 +678,12 @@ Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
 summary(Base_model)
 # in my opinion it is a bit redundant if we consider that we have also purpose, but may be some pattern also here
 
-#Candidate New variables
+
+
+
+# =====================================================================
+# FEATURE ENGINEERING: CANDIDATE NEW VARIABLES
+# =====================================================================
 
 #Class_Income
 df$Class_Income<-ifelse(df$annual_inc<15000,0,ifelse(df$annual_inc>=15000 & df$annual_inc<35000,1,ifelse(df$annual_inc>=35000 & df$annual_inc<60000,2,ifelse(df$annual_inc>=60000 & df$annual_inc<100000,3,4))))
@@ -643,19 +719,13 @@ df$Good_employment<-df_nlp$Good_employment
 
 #(!) still possible to investigate how other variables can be combined to produce better predictors
 
-# a closer look at the annual income
-# range 0 - 9.5 mio., i.e. some one-sided huge outliers --> apply some threshold then scale
-# 4 NAs --> apply some strategy to fill (mean / median / closest neighbour)
-summary(df$annual_inc)
-hist(df$annual_inc, main="Annual Income")
-boxplot(df$annual_inc, main="Annual Income")
+
 
 
 
 # train split (choose the number of raw by changing the percentage in the row_train)
-# TODO - this train / test split is not good --> we should randomize the dataset first before holdout of test data!
 variables_for_prediction<-df[, c(
-                               "Class_Income"
+                               "Class_Income",
                                "emp_length2",
                                "total_acc",
                                "revol_bal",
