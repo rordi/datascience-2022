@@ -132,6 +132,37 @@ df = subset(df, select = -c(
 # write.csv(df, "./A1_regression/LCdata_0_dropped.csv")
 
 
+# =====================================================================
+# HANDLE EMPTY RECORDS
+# =====================================================================
+
+# it seems some attributes have excatly 25 NAs - a closer look reveals that it is the same record IDs in different attributes
+# (meaning that these rows seem filled with missing values)
+which(is.na(df$delinq_2yrs))
+which(is.na(df$inq_last_6mths))
+which(is.na(df$open_acc))
+which(is.na(df$pub_rec))
+which(is.na(df$total_acc))
+which(is.na(df$acc_now_delinq))
+
+# drop those 25 empty rows from the df
+df<-df[-which(is.na(df$delinq_2yrs))]
+df_raw<-df_raw[-which(is.na(df_raw$delinq_2yrs))] # make df_raw same length as df so that we can easily re-copy an attribute to df later on if we make mistakes
+
+
+# =====================================================================
+# CREATE FRAME FOR OUR TARGET VARIABLE
+# =====================================================================
+#
+# this is a step that WILL NOT BE DONE in the final script - the final script is not supposed to contain the int_rate!
+
+# we take a closer look at the int_rate, which is our target variable!
+df_int_rate <- df[, c("int_rate")]
+df_int_rate$int_rate<-(df_int_rate$int_rate/100) # scale percentage to numeric [TODO - we will need to scale back MSE according to Gwen's email]
+df = subset(df, select = -c(
+  int_rate # remove or target from the working copy data frame
+))
+
 
 # =====================================================================
 # CREATE NLP FRAME FOR FREE-TEXT STRING ATTRIBUTES
@@ -191,23 +222,6 @@ skim(df)
 # we should full ignore this. In reality we would probably want to predict the interest spread from some inter-bank load interest rate (e.g. LIBOR).
 
 
-# =====================================================================
-# HANDLE EMPTY RECORDS
-# =====================================================================
-
-# it seems some attributes have excatly 25 NAs - a closer look reveals that it is the same record IDs in different attributes
-# (meaning that these rows seem filled with missing values)
-which(is.na(df$delinq_2yrs))
-which(is.na(df$inq_last_6mths))
-which(is.na(df$open_acc))
-which(is.na(df$pub_rec))
-which(is.na(df$total_acc))
-which(is.na(df$acc_now_delinq))
-
-# drop those 25 empty rows from the df
-df<-df[-which(is.na(df$delinq_2yrs))]
-df_raw<-df_raw[-which(is.na(df_raw$delinq_2yrs))] # make df_raw same length as df so that we can easily re-copy an attribute to df later on if we make mistakes
-
 
 
 # =====================================================================
@@ -234,7 +248,7 @@ describe_feature <- function(feature, feature_name = "Feature") {
   message(paste("Sparsity relative: ", length(which(feature_handled == 0))/length(feature_handled)))
   
   # what is the correlation of the feature with our target variable?
-  message(paste("Correlation with target variable: ", cor(feature_handled,df$int_rate)))
+  message(paste("Correlation with target variable: ", cor(feature_handled,df_int_rate$int_rate)))
   
   # outliers detection (exclude null values as we have some very sparse attributes)
   outliers<-boxplot.stats(feature_handled)$out
@@ -345,22 +359,6 @@ handle_empt_length<-function(feature) {
 # recorded in a Google Sheet for better overview: https://docs.google.com/spreadsheets/d/1d9JnSfMhEuIjDAsVg6EK4g-UefP_-IXGu-S9b9Y1gbY
 
 
-# Target variable check
-# --------------------------------------------------------------------
-
-# we take a closer look at the int_rate, which is our target variable!
-# @TODO -- interest rate is in the range 5.32 - 28.99 --> we should divide by 100 - but if we do, the last step in our prediction of interest rate will be to multiply again with 100 to have same order of magnitude!
-# also, Gwen mentioned in email that we need to scale the MSE to report back to the "customer"
-describe_feature(df$int_rate, "Interest Rate (%)")     # some 5667 outliers in the range 25.57 - 28.99
-df$int_rate<-(df$int_rate/100) # scale percentage to numeric
-df_outliers<-subset(df, df$int_rate >= 0.2557)
-skim(df_outliers)
-
-# @TODO - we need to check if the interest rate is statistically significantly different between single and joint applications !! (no time - skipped)
-# ...
-
-
-
 # Categorical features
 # --------------------------------------------------------------------
 
@@ -395,7 +393,7 @@ df_dummies<-df_dummies[,(numcol+1):ncol(df_dummies)]
 
 # here we compute the correlations with target variable for each of the dummy variables and sort them descending by absolute value
 # (either strongly negative or strongly positive correlated on top). 
-z<-cor(df$int_rate, df_dummies)
+z<-cor(df_int_rate$int_rate, df_dummies)
 z[z == 1] <- NA #drop perfect
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
@@ -554,6 +552,7 @@ describe_feature(df$delinq_2yrs, "Earliest CR Line") # 0.055 correlation
 
 # last_credit_pull_d, format is Apr-1955, simply convert to year by taking substring of last 4 chars
 df$last_credit_pull_d<-as.numeric(substr(df$last_credit_pull_d, 5, 8)) 
+df$last_credit_pull_d<-handle_na(df$last_credit_pull_d)
 describe_feature(df$last_credit_pull_d, "Last credit pull date") # 0.001 correlation
 
 # delinq_2yrs --> <0.01% missing values
@@ -576,7 +575,7 @@ df$inq_last_6mths<-abs(df$inq_last_6mths) # fix typing errors: negative values a
 describe_feature(df$inq_last_12m, "Inquries past 12 months") # 0.012 correlation
 df$inq_last_12m<-replace_na(df$inq_last_12m,0) # replace NA with 0
 df$inq_last_12m<-abs(df$inq_last_12m) # fix typing errors: negative values are not meaningful
-cor(df$inq_last_12m,df$int_rate) # -0.001%
+cor(df$inq_last_12m,df_int_rate$int_rate) # -0.001%
 cor(df$inq_last_12m,df$inq_last_6mths) #0.03% (although they seem independent, each inq in past 6 months is also an inq in past 12 months thus the two have dependency)
 
 # we drop inq_last_12mths and inq_last_6mths is ma much better predictor
@@ -593,7 +592,7 @@ df$inq_fi<-replace_na(df$inq_fi,0)
 # mths_since_last_delinq --> 51% missing values
 describe_feature(df$mths_since_last_delinq, "Months since last deliquency") # 0.046 correlation
 df$mths_since_last_delinq[is.na(df$mths_since_last_delinq)]<-ifelse(df$delinq_2yrs==0,0,df$delinq_2yrs*12)
-cor(df$int_rate,df$mths_since_last_delinq)
+cor(df_int_rate$int_rate,df$mths_since_last_delinq)
 
 
 # mths_since_last_record --> 84% missing values
@@ -622,7 +621,7 @@ df$tot_cur_bal<-handle_na(df$tot_cur_bal)
 # pub_rec
 describe_feature(df$pub_rec, "Public Record") # many outliers, -0.011 correlation
 df$pub_rec<-handle_na(df$pub_rec)
-cor(df$int_rate,df$pub_rec)
+cor(df_int_rate$int_rate,df$pub_rec)
 
 
 # revol_bal
@@ -649,13 +648,14 @@ describe_feature(df$total_acc, "Total Account (thresholded, median)") # -0.048 c
 # collections_12_mths_ex_med (Power Law distribution, make sense to replace it with 0)
 describe_feature(df$collections_12_mths_ex_med, "Collections past 12 months") # 0.013 correlation
 df$collections_12_mths_ex_med<-ifelse(df$collections_12_mths_ex_med>=1, 1, 0) # try convert to a binary flag
-cor(df$int_rate,df$collections_12_mths_ex_med) # 0.014 correlation, clightly better but still weak
+df$collections_12_mths_ex_med<-handle_na(df$collections_12_mths_ex_med)
+cor(df_int_rate$int_rate,df$collections_12_mths_ex_med) # 0.014 correlation, clightly better but still weak
 
 
 # mths_since_last_major_derog
 describe_feature(df$mths_since_last_major_derog, "Monsth since last mjr derogation") # 0.063 correlation
 df$mths_since_last_major_derog<-handle_na(df$mths_since_last_major_derog)
-cor(df$int_rate,df$mths_since_last_major_derog)
+cor(df_int_rate$int_rate,df$mths_since_last_major_derog)
 
 
 #total_bal_il
@@ -683,17 +683,44 @@ describe_feature(df$acc_now_delinq, "Account now delinquent") # 0.026 correlatio
 df$acc_now_delinq<-handle_na(df$acc_now_delinq)
 
 
+# policy_code --> SD is 0, all values are identical
+describe_feature(df$policy_code, "Policy code")
+df = subset(df, select = -c(
+  policy_code
+))
 
-#df$tot_coll_amt
+# mths_since_rcnt_il
+describe_feature(df$mths_since_rcnt_il, "Months since recent 'IL'") # -0.036 correlation
+df$mths_since_rcnt_il<-handle_na(df$mths_since_rcnt_il)
 
+# il_util
+describe_feature(df$il_util, "'IL' Util") # -0.02 correlation
+df$il_util<-handle_na(df$il_util)
 
+# max_bal_bc
+describe_feature(df$max_bal_bc, "Max Balance BC") # -0.036 correlation
+df$max_bal_bc<-handle_na(df$max_bal_bc)
 
+# total_rev_hi_lim
+describe_feature(df$total_rev_hi_lim, "Total Revolving High Limit") # -0.14 correlation
+df$total_rev_hi_lim<-handle_na(df$total_rev_hi_lim)
+
+# total_cu_tl
+describe_feature(df$total_cu_tl, "Total Cu Tl") # -0.014 correlation
+df$total_cu_tl<-handle_na(df$total_cu_tl)
+
+# double-check that we handled all features: we should not have NAs left in the df!
+which(colSums(is.na(df))>0)
 
 # show summary of the df after feature handling
 skim(df)
 
-# plot a correlation matrix
-corrplot(as.numeric(df), method="circle")
+# compute correlations between all our features and our target variable --> we can use it to
+# drop some features that contribute only very little to explain the interest rate
+z<-cor(df_int_rate$int_rate, df)
+z[z == 1] <- NA #drop perfect
+z<-na.omit(melt(z)) # melt! 
+z[order(-abs(z$value)),] # sort
 
 
 
@@ -719,7 +746,7 @@ NLP<-tm_map(NLP,stripWhitespace)
 NLP_m<-DocumentTermMatrix(NLP)
 NLP_m1<-removeSparseTerms(NLP_m, 0.999)
 NLP_dataset<-as.data.frame(as.matrix(NLP_m1))
-NLP_dataset$int_rate<-df$int_rate
+NLP_dataset$int_rate<-df_int_rate$int_rate
 cor(NLP_dataset$int_rate,NLP_dataset)
 
 #Makes sense to me merge all the variables that represent a good job position together, below the formula for the deployment phase (in the candidate variables)
@@ -738,7 +765,7 @@ NLP_desc<-tm_map(NLP_desc,stripWhitespace)
 NLP_m_desc<-DocumentTermMatrix(NLP_desc)
 NLP_desc1<-removeSparseTerms(NLP_m_desc, 0.999)
 NLP_desc_dataset<-as.data.frame(as.matrix(NLP_desc1))
-NLP_desc_dataset$int_rate<-df$int_rate
+NLP_desc_dataset$int_rate<-df_int_rate$int_rate
 cor(NLP_desc_dataset$int_rate,NLP_desc_dataset)
 Base_model<- lm(int_rate~.,data=NLP_desc_dataset)
 summary(Base_model)
@@ -753,34 +780,24 @@ summary(Base_model)
 
 #Class_Income
 df$Class_Income<-ifelse(df$annual_inc<15000,0,ifelse(df$annual_inc>=15000 & df$annual_inc<35000,1,ifelse(df$annual_inc>=35000 & df$annual_inc<60000,2,ifelse(df$annual_inc>=60000 & df$annual_inc<100000,3,4))))
-cor(df$int_rate,df$Class_Income)
+cor(df_int_rate$int_rate,df$Class_Income)
 
 
 #Has_something_wrong_done
 df$Has_something_wrong_done<-ifelse(df$pub_rec==0 & df$delinq_2yrs==0 & df$mths_since_last_major_derog==0,0,1)
-cor(df$int_rate,df$Has_something_wrong_done)
+cor(df_int_rate$int_rate,df$Has_something_wrong_done)
 
 #months_since_bad_situation
 df$months_since_bad_situation<-(df$mths_since_last_major_derog+df$mths_since_last_delinq+df$mths_since_last_record)
-cor(df$months_since_bad_situation,df$int_rate)
+cor(df$months_since_bad_situation,df_int_rate$int_rate)
 
 #Loan_to_Wealth_index
 df$Loan_to_Wealth_index<-df$loan_amnt/(1+df$tot_cur_bal+7*df$annual_inc)
-cor(df$int_rate,df$Loan_to_Wealth_index)
-
-
-#tot_curr_bal (tried different replacement methods, mean has a better corr I kept it)
-df$tot_cur_bal[is.na(df$tot_cur_bal)] <- mean(df$tot_cur_bal, na.rm = TRUE)
-cor(df$int_rate,df$tot_cur_bal)
-
-#tot_coll_amt (irrilevant, even with different replacement methods)
-df$tot_coll_amt[is.na(df$tot_coll_amt)] <- mean(df$tot_coll_amt, na.rm = TRUE)
-df$tot_coll_amt<-replace_na(df$tot_coll_amt,0)
-cor(df$int_rate,df$tot_coll_amt)
+cor(df_int_rate$int_rate,df$Loan_to_Wealth_index)
 
 #Good_employment
 df_nlp$Good_employment<-ifelse(grepl("physician|chief|professor|attorney|scientist|advisory|executive|financial|project|consultant|teacher|software|president|manager|owner|director|analyst|engineer|senior|President|Manager|Owner|Director|Analyst|Engineer|Senior|Software|Teacher|Consultant|Project|Financial|Executive|Advisory|Scientist|Attorney|Professor|Chief|Physician", df_nlp$emp_title)==TRUE,1,0)
-cor(df$int_rate,df_nlp$Good_employment)
+cor(df_int_rate$int_rate,df_nlp$Good_employment)
 df$Good_employment<-df_nlp$Good_employment
 
 #(!) still possible to investigate how other variables can be combined to produce better predictors
