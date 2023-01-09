@@ -350,23 +350,18 @@ handle_empt_length<-function(feature) {
                                                                                ifelse(feature=="10+ years", 10, NA))))))))))))
 }
 
-
 #**
-#* function to regroup good purposes into one flag, this is based on findings from
+#* function to regroup good verification status into one flag, this is based on findings from
 #* dummy encoding
 #*
-handle_purpose<-function(df) {
+handle_verification_status<-function(df) {
   return(
     ifelse(
-      df$purpose == 'educational' | 
-        df$purpose == 'home_improvement' |
-        df$purpose == 'major_purchase' | 
-        df$purpose == 'car' | 
-        df$purpose == 'credit_card'
+      df$verification_status_combined == 'Verified' | 
+        df$verification_status_combined == 'Source Verified'
       , 1, 0)
   )
 }
-
 
 # =====================================================================
 # FEATURE SELECTION OF EXISTING FEATURES
@@ -414,31 +409,42 @@ z[z == 1] <- NA #drop perfect
 z<-na.omit(melt(z)) # melt! 
 z[order(-abs(z$value)),] # sort
 
-z[order(-(z$value)),] # sort
 
 # based on theses correlations, it seems the following dummy vars seem interesting tp pursue further!
 #
-#1   1    verification_status_combined_Not Verified -2.178569e-01
-#3   1        verification_status_combined_Verified  2.106720e-01
-#5   1                          purpose_credit_card -1.846414e-01
-#6   1                   purpose_debt_consolidation  9.647653e-02
-#13  1                                purpose_other  9.198582e-02
-#15  1                       purpose_small_business  7.394402e-02
-#23  1                          home_ownership_RENT  6.176908e-02
-#19  1                      home_ownership_MORTGAGE -6.152897e-02
-#12  1                               purpose_moving  4.402282e-02
-#9   1                                purpose_house  4.061277e-02
-#11  1                              purpose_medical  3.030260e-02
-#4   1                                  purpose_car -2.892246e-02
-#43  1                                addr_state_MA -2.033319e-02
-#10  1                       purpose_major_purchase -1.813078e-02
-#16  1                             purpose_vacation  1.807930e-02
-#25  1                                addr_state_AL  1.289503e-02
-#8   1                     purpose_home_improvement -1.209862e-02
-#14  1                     purpose_renewable_energy  1.188388e-02
-#35  1                                addr_state_HI  1.105064e-02
-#17  1                              purpose_wedding  1.082496e-02
-#66  1                                addr_state_TN  9.213030e-03
+# X1                                           X2         value
+# 1   1    verification_status_combined_Not Verified -2.178569e-01
+# 3   1        verification_status_combined_Verified  2.106720e-01
+# 5   1                          purpose_credit_card -1.846414e-01
+# 6   1                   purpose_debt_consolidation  9.647653e-02
+# 13  1                                purpose_other  9.198582e-02
+# 15  1                       purpose_small_business  7.394402e-02
+# 23  1                          home_ownership_RENT  6.176908e-02
+# 19  1                      home_ownership_MORTGAGE -6.152897e-02
+# 12  1                               purpose_moving  4.402282e-02
+# 9   1                                purpose_house  4.061277e-02
+# 11  1                              purpose_medical  3.030260e-02
+# 4   1                                  purpose_car -2.892246e-02
+# 43  1                                addr_state_MA -2.033319e-02
+# 10  1                       purpose_major_purchase -1.813078e-02
+# 16  1                             purpose_vacation  1.807930e-02
+# 25  1                                addr_state_AL  1.289503e-02
+# 8   1                     purpose_home_improvement -1.209862e-02
+# 14  1                     purpose_renewable_energy  1.188388e-02
+# 35  1                                addr_state_HI  1.105064e-02
+# 17  1                              purpose_wedding  1.082496e-02
+# 66  1                                addr_state_TN  9.213030e-03
+# 28  1                                addr_state_CA -7.765289e-03
+# 38  1                                addr_state_IL -7.050985e-03
+# 51  1                                addr_state_NC  6.899367e-03
+# 54  1                                addr_state_NH -6.861075e-03
+# 72  1                                addr_state_WI -6.655740e-03
+# 57  1                                addr_state_NV  6.175913e-03
+
+
+# copy verifications status Verified and Source Verified into the main df
+df$good_verification_status<-handle_verification_status(df)
+describe_feature(df$good_verification_status, "Verification Status (Good)") # 0.2106 correlation
 
 # copy home ownership RENT and MORTGAGE dummies to main df
 df$home_ownership_RENT<-df_dummies$home_ownership_RENT
@@ -467,8 +473,20 @@ df = subset(df, select = -c(
 df$good_states<-handle_states(df_raw)
 describe_feature(df$good_states, "Good States") #-0.029 correlation
 
-df$good_purposes<-handle_purpose(df_raw)
-describe_feature(df$good_purposes, "Good Purposes") #-0.1849 correlation
+# copy all purposes dummies to the main df - they show all good positive or negative corrleation with the target
+df$purpose_credit_card<-df_dummies$purpose_credit_card
+df$purpose_debt_consolidation<-df_dummies$purpose_debt_consolidation
+df$purpose_other<-df_dummies$purpose_other
+df$purpose_small_business<-df_dummies$purpose_small_business
+df$purpose_moving<-df_dummies$purpose_moving
+df$purpose_house<-df_dummies$purpose_house
+df$purpose_medical<-df_dummies$purpose_medical
+df$purpose_car<-df_dummies$purpose_car
+df$purpose_major_purchase<-df_dummies$purpose_major_purchase
+df$purpose_vacation<-df_dummies$purpose_vacation
+df$purpose_home_improvement<-df_dummies$purpose_home_improvement
+df$purpose_renewable_energy<-df_dummies$purpose_renewable_energy
+df$purpose_wedding<-df_dummies$purpose_wedding
 
 # initial_list_status (w/f) -> encode as 0/a
 df$initial_list_status<-replace(df$initial_list_status, df$initial_list_status == 'w', 0)
@@ -649,6 +667,9 @@ cor(df_int_rate$int_rate,df$pub_rec)
 # revol_bal
 describe_feature(df$revol_bal, "Revolving Balance") # -0.036 correlation
 df$revol_bal<-handle_na(df$revol_bal)
+df$revol_bal<-apply_threshold(df$revol_bal, threshold = 35000) # threshold 1.5*IRQ
+describe_feature(df$revol_bal, "Revolving Balance (thresholded)") # -0.036 correlation
+
 
 
 # revol_util (I investigated the NAs of the attribute but didn't find any explanation
@@ -835,7 +856,8 @@ df_selection<-df[, c(
   "revol_util",
   "loan_to_wealth_index",
   "inq_last_6mths",
-  "good_purposes",
+  "good_verification_status",
+  "purpose_credit_card",
   "declared_dti",
   "loan_amnt",
   "total_rev_hi_lim",
@@ -843,15 +865,28 @@ df_selection<-df[, c(
   "annual_inc_combined",
   "earliest_cr_line",
   "has_wrong_doing",
+  "purpose_debt_consolidation",
+  "purpose_other",
   "months_since_bad_situation",
   "good_employment", 
   "tot_cur_bal",
+  "purpose_small_business",
   "mths_since_last_major_derog",
   "home_ownership_RENT",
   "home_ownership_MORTGAGE",
   "mths_since_last_record",
   "delinq_2yrs",
-  "pub_rec"
+  "pub_rec",
+  "total_acc",
+  "mths_since_last_delinq",
+  "purpose_moving",
+  "purpose_house",
+  "mths_since_rcnt_il",
+  "max_bal_bc",
+  "purpose_medical",
+  "good_states",
+  "revol_bal",
+  "acc_now_delinq"
 )] 
 
 # Step (2) -- correlation matrix so we can exclude highly dependent variables
@@ -890,9 +925,9 @@ min_max_scale<-function(x, known_min, known_max) {
 
 # we use fix min and max values based on the dataset so that we can copy this 1:1 to the prediction file
 df_selection$revol_util<-min_max_scale(df_selection$revol_util, 0, 92)
-df_selection$loan_to_wealth_index<-min_max_scale(df_selection$loan_to_wealth_index, 0, 0.05)
+df_selection$loan_to_wealth_index<-min_max_scale(df_selection$loan_to_wealth_index, 0, 0.045)
 df_selection$inq_last_6mths<-min_max_scale(df_selection$inq_last_6mths, 0, 33)
-df_selection$declared_dti<-min_max_scale(df_selection$declared_dti, 0, 44)
+df_selection$declared_dti<-min_max_scale(df_selection$declared_dti, 0, 43.5)
 df_selection$loan_amnt<-min_max_scale(df_selection$loan_amnt, 500, 35000)
 df_selection$total_rev_hi_lim<-min_max_scale(df_selection$total_rev_hi_lim, 0, 9999999)
 df_selection$annual_inc_combined<-min_max_scale(df_selection$annual_inc_combined, 0, 150000)
@@ -901,7 +936,12 @@ df_selection$months_since_bad_situation<-min_max_scale(df_selection$months_since
 df_selection$tot_cur_bal<-min_max_scale(df_selection$tot_cur_bal, 0, 280000)
 df_selection$delinq_2yrs<-min_max_scale(df_selection$delinq_2yrs, 0, 39)
 df_selection$pub_rec<-min_max_scale(df_selection$pub_rec, 0, 63)
-
+df_selection$total_acc<-min_max_scale(df_selection$total_acc, 0, 39)
+df_selection$mths_since_last_delinq<-min_max_scale(df_selection$mths_since_last_delinq, 0, 188)
+df_selection$mths_since_rcnt_il<-min_max_scale(df_selection$mths_since_rcnt_il, 0, 363)
+df_selection$revol_bal<-min_max_scale(df_selection$revol_bal, 0, 35000)
+df_selection$acc_now_delinq<-min_max_scale(df_selection$acc_now_delinq, 0, 14)
+df_selection$max_bal_bc<-min_max_scale(df_selection$max_bal_bc, 0, 83047)
 
 
 
@@ -911,11 +951,14 @@ df_selection$pub_rec<-min_max_scale(df_selection$pub_rec, 0, 63)
 
 # copy the int_rates back to selection df before we split
 df_selection$int_rate<-df_int_rate[, c("int_rate")]
-  
+
+# dump final, preprocessed data to CSV
+write.csv(df_selection, "./A1_regression/LCdata_preprocessed.csv", row.names = FALSE)
+
   
 # create test and train splits of the data
 split<-0.2
-cuttoff=round(nrow(df_selection)*split)
+cuttoff=round(nrow(df_selection)*(1-split))
 train_data<-df_selection[0:cuttoff,]
 test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 
@@ -925,6 +968,7 @@ test_data<-df_selection[(cuttoff+1):nrow(df_selection),]
 # =====================================================================
 # COMPARE DIFFERENT REGRESSION MODELS
 # =====================================================================
+
 
 
 # Multiple Linear Regression
@@ -940,8 +984,8 @@ reg_linear<-function() {
 }
 reg_linear()
 
-#[1] "MAE (model_linear): 3.33941078770344"
-#[1] "MSE (model_linear): 18.9088306626918"
+# [1] "MAE (model_linear): 2.86424177902487"
+# [1] "MSE (model_linear): 13.4008430477998"
 
 
 
@@ -959,8 +1003,9 @@ reg_tree<-function() {
 }
 reg_tree()
 
-#[1] "MAE (model_regression_tree): 3.2514833048632"
-#[1] "MSE (model_regression_tree): 17.7943930272151"
+# [1] "MAE (model_regression_tree): 2.95680296705916"
+# [1] "MSE (model_regression_tree): 14.1357937545126"
+
 
 
 
@@ -975,10 +1020,10 @@ reg_random_forest<-function() {
   print(paste0('MAE (model_random_forest): ' , mae))
   print(paste0('MSE (model_random_forest): ' , mse))
 }
-# reg_random_forest() # slow !
+# reg_random_forest() # slow ! uncomment if you are patient...
 
-# "MAE (model_random_forest): 3.31225578804117"
-# "MSE (model_random_forest): 18.3619827351034"
+#[1] "MAE (model_adaboost): 3.69784977948091"
+#[1] "MSE (model_adaboost): 22.1353119101919"
 
 
 
@@ -991,8 +1036,8 @@ reg_adaboost<-function () {
                         distribution = "gaussian",
                         cv.folds = 10,
                         shrinkage = .01,
-                        n.minobsinnode = 10,
-                        n.trees = 120)
+                        n.minobsinnode = 12,
+                        n.trees = 100)
   yhat<-predict(model_adaboost, test_data)
   mae<-mae(test_data$int_rate, yhat)
   mse<-mean((yhat-test_data$int_rate)^2)
@@ -1001,8 +1046,8 @@ reg_adaboost<-function () {
 }
 reg_adaboost()
 
-#[1] "MAE (model_adaboost): 3.69838221178991"
-#[1] "MSE (model_adaboost): 22.1401418482551"
+# [1] "MAE (model_adaboost): 3.3757140209727"
+# [1] "MSE (model_adaboost): 18.3393416851557"
 
 
 
@@ -1034,9 +1079,16 @@ reg_xgboost<-function() {
   mse<-mean((yhat-test_data$int_rate)^2)
   print(paste0('MAE (model_xgboost): ' , mae))
   print(paste0('MSE (model_xgboost): ' , mse))
+  
+  return (model_xgboost)
 }
-reg_xgboost()
+winning_model = reg_xgboost()
 
-#[1] "MAE (model_xgboost): 3.05814907614606"
-#[1] "MSE (model_xgboost): 15.9245715411197"
+# [1] "MAE (model_xgboost): 2.66183252333565"
+# [1] "MSE (model_xgboost): 11.6816994656321"  on 159723 test sample size
+
+dim(train_data)
+dim(test_data)
+
+
 

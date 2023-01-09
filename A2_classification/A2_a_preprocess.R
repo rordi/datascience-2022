@@ -433,7 +433,7 @@ oversample_classes<-function (df_train) {
   num_majority<-sum(df_train$status_numeric == 0) # number of values of the majority class
   for (i in 1:7) {
     num_minority<-sum(df_train$status_numeric == i) # number of values of the minority class
-    duplication_factor<-ceiling(5000 / num_minority) - 1  # oversample so that we have at least 5K for each class
+    duplication_factor<-ceiling(41000 / num_minority) - 1  # oversample so that we have at least 5K for each class
     if (duplication_factor > 1) {
       df_train<-copy_class_data(df_train, n = duplication_factor, class=i)  
     }
@@ -501,7 +501,7 @@ View(data_test_label)
 build_optimizer_sgd<-function () {
   # Tensorflow < 2.3 becase some params in Keras optimizer_sgd changed name)
   sgd<-optimizer_sgd(
-    learning_rate = 1e-3, # use "lr" in older releases of tensorflow !
+    learning_rate = 1e-5, # use "lr" in older releases of tensorflow !
     #lr = 1e-3,
     momentum = 0.9,
     weight_decay = 1e-6, # use "decay" in older releases of tensorflow !
@@ -518,7 +518,7 @@ build_optimizer_sgd<-function () {
 #* 
 build_optimizer_adam<-function () {
   adam<-optimizer_adam( 
-    lr = 1e-3, # use "lr" in older releases of tensorflow !
+    lr = 5e-4, # use "lr" in older releases of tensorflow !
     #lr = 1e-4,
     beta_1 = 0.9,
     beta_2 = 0.999,
@@ -536,14 +536,16 @@ build_model <- function() {
   shape_input<-c(ncol(data_train))
   shape_output<-8
   
-  neurons<-600
-  dropout<-0.06
-  
   model<-keras_model_sequential() 
   model %>% 
-    layer_conv_1d(filters=64, kernel_size=2, input_shape=shape_input, activation="relu") %>%
-    layer_max_pooling_1d() %>%
-    layer_flatten() %>%
+    layer_dense(units = 1500, activation="sigmoid", input_shape=shape_input) %>%
+    layer_dropout(0.4) %>%
+    layer_dense(units = 1000, activation = "sigmoid") %>%
+    layer_dropout(0.4) %>%
+    layer_dense(units = 400, activation = "sigmoid") %>%
+    layer_dense(units = 200, activation = "sigmoid") %>%
+    layer_dense(units = 100, activation = "relu") %>%
+    layer_dense(units = 15, activation = "relu") %>%
     layer_dense(units = shape_output, activation = "softmax") # Output layer
 
   summary(model)
@@ -560,14 +562,16 @@ build_model_1d <- function() {
   shape_output<-8
   
   model = keras_model_sequential() %>%
-    layer_conv_1d(filters=64, kernel_size=8, input_shape=shape_input, activation="relu") %>%
-    layer_conv_1d(filters=64, kernel_size=2, activation="relu") %>%
+    layer_conv_1d(filters=512, kernel_size=12, input_shape=shape_input, activation="relu") %>%
+    layer_conv_1d(filters=256, kernel_size=4, activation="relu") %>%
+    layer_conv_1d(filters=128, kernel_size=2, activation="relu") %>%
     layer_max_pooling_1d() %>%
     layer_flatten() %>%
-    layer_dense(units = 640, activation = "relu") %>%
-    layer_dense(units = 640, activation = "relu") %>%
-    layer_dense(units = 640, activation = "relu") %>%
+    layer_dense(units = 500, activation = "relu") %>%
+    layer_dense(units = 500, activation = "relu") %>%
     layer_dropout(rate = 0.1) %>%
+    layer_dense(units = 500, activation = "relu") %>%
+    layer_dense(units = 500, activation = "relu") %>%
     layer_dense(units = shape_output, activation = "softmax") # Output layer
   
   summary(model)
@@ -588,7 +592,7 @@ data_test_1d = array(data_test, dim = c(nrow(data_test), ncol(data_test), 1))
 
 # Build the model and optimizer
 #model<-build_model()
-model<-build_model_1d()
+model<-build_model()
 optimizer<-build_optimizer_adam()
 
 
@@ -603,10 +607,10 @@ model<-model %>%
 # Train the model
 history<-model %>%
   fit(
-    data_train_1d, data_train_label,
-    epochs = 100,
-    batch_size = 64,
-    validation_data=list(data_test_1d, data_test_label)
+    data_train, data_train_label,
+    epochs = 2000,
+    batch_size = 256,
+    validation_data=list(data_test, data_test_label)
   )
 
 # Evaluate the trained model
@@ -616,7 +620,7 @@ plot(history)
 #bias<-as.matrix(model$layers[[lastlayer]]$weights[[2]])
 
 # Evaluate the model on test data
-metrics<-model %>% evaluate(data_test_1d, data_test_label)
+metrics<-model %>% evaluate(data_test, data_test_label)
 metrics
 
 # Observations from metrics:

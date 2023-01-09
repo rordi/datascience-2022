@@ -5,3 +5,5 @@
 .Ruserdata
 A1_regression/LCdata.csv
 A1_regression/*.csv
+A1_regression/regression_final/LCdata_preprocessed.csv
+*.csv
