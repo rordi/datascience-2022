@@ -6,7 +6,6 @@ Group A2
 
  - Dietrich Rordorf
  - Marco Lecci
- - Rizoanun Nasa
  - Sarah Castratori
 
 ### Assignment 1
